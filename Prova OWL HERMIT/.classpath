@@ -8,7 +8,11 @@
 	</classpathentry>
 	<classpathentry kind="lib" path="HermiT.jar"/>
 	<classpathentry kind="lib" path="org.semanticweb.HermiT.jar"/>
-	<classpathentry kind="lib" path="owlapi-osgidistribution-4.0.1 (1).jar"/>
+	<classpathentry kind="lib" path="owlapi-osgidistribution-4.0.1 (1).jar">
+		<attributes>
+			<attribute name="javadoc_location" value="file:/c:/Users/Flavio/git/Prova OWL HERMIT/owlapi-osgidistribution-4.0.1-javadoc.jar"/>
+		</attributes>
+	</classpathentry>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/J2SE-1.5">
 		<attributes>
 			<attribute name="maven.pomderived" value="true"/>

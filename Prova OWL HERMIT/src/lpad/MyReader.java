@@ -9,7 +9,18 @@ import java.util.Set;
 
 
 
+
+
+
+
+
+
+
+import org.coode.owlapi.manchesterowlsyntax.ManchesterOWLSyntaxEditorParser;
 import org.semanticweb.HermiT.Reasoner;
+import org.semanticweb.owlapi.expression.OWLEntityChecker;
+import org.semanticweb.owlapi.expression.ParserException;
+import org.semanticweb.owlapi.expression.ShortFormEntityChecker;
 import org.semanticweb.owlapi.io.OWLOntologyDocumentSource;
 import org.semanticweb.owlapi.io.ReaderDocumentSource;
 import org.semanticweb.owlapi.model.*;
@@ -17,6 +28,7 @@ import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassAxiom;
 import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLIndividual;
 import org.semanticweb.owlapi.model.OWLNamedIndividual;
 import org.semanticweb.owlapi.model.OWLNamedObjectVisitor;
@@ -27,7 +39,14 @@ import org.semanticweb.owlapi.model.OWLSubClassOfAxiom;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.util.BidirectionalShortFormProvider;
+import org.semanticweb.owlapi.util.BidirectionalShortFormProviderAdapter;
+import org.semanticweb.owlapi.util.OWLClassExpressionCollector;
+import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.SimpleIRIMapper;
+import org.semanticweb.owlapi.util.SimpleShortFormProvider;
+
+import uk.ac.manchester.cs.owl.owlapi.OWLClassExpressionImpl;
 
 
 
@@ -121,10 +140,25 @@ public class MyReader implements OWLReader{
 		
 		Reasoner r=(Reasoner) reasoner;
 		
+		ShortFormProvider shortFormProvider = new SimpleShortFormProvider();
 		
-		
+		//parte in cui proviamo con le dl query
+		String classExpressionString="RiskFactor";
+		OWLDataFactory dataFactory = ontology.getOWLOntologyManager()
+                .getOWLDataFactory();
+        // Set up the real parser
+        DLQueryParser parser=new DLQueryParser(ontology, shortFormProvider);
+        
+        OWLClassExpression clex=parser.parseClassExpression(classExpressionString);
+        
+        for(Node<OWLNamedIndividual> n:reasoner.getInstances(clex, false)){
+        	for (OWLNamedIndividual owlNamedIndividual : n) {
+				System.out.println("STICAZZI:"+owlNamedIndividual.toStringID());
+			}
+        }
 		return null;
-		
 	}//fine read
 
 }
+
+
