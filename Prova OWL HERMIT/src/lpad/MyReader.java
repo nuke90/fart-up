@@ -112,44 +112,16 @@ public class MyReader implements OWLReader{
 		
 		
 		//TODO come procediamo?
-//		
-//		KnowledgeBase kb=reasoner.getKB();
-//		
-//		//FIXME qui ci vuole anche jena per fare il passaggio delle query!!!!!
-//		PelletInfGraph graph=new org.mindswap.pellet.jena.PelletReasoner().bind( kb );
-//		
-//		// Wrap the graph in a model
-//		InfModel model = ModelFactory.createInfModel( graph );
-//		// Use the model to answer SPARQL queries
-//		String queryString=null;
-//		
-//		queryString="PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
-//				+ "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n"
-//				+ "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
-//				+ "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\n"
-//				+ "SELECT ?subject ?object\n"
-//				+ "WHERE { ?subject rdfs:subClassOf ?object }";
-//		
-//		System.out.println(queryString);
-//		
-//		Query q=QueryFactory.create(queryString);
-//		
-//		QueryExecution qex=QueryExecutionFactory.create(q,model);
-//		
-//		ResultSet results = qex.execSelect();
-//	    ResultSetFormatter.out(System.out, results, q);       
-//
-//	     qex.close() ;
-//		
-		
-//		Selector s;
-//		Statement stat;
-//		
-//		s=new SelectorImpl();
-		
+
 		
 		
 		//SparqlOwlParser par= SparqlOwlParser.
+		
+		//proviamo la query con hermit
+		
+		Reasoner r=(Reasoner) reasoner;
+		
+		
 		
 		return null;
 		
