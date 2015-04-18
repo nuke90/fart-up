@@ -143,7 +143,7 @@ public class MyReader implements OWLReader{
 		ShortFormProvider shortFormProvider = new SimpleShortFormProvider();
 		
 		//parte in cui proviamo con le dl query
-		String classExpressionString="RiskFactor";
+		String classExpressionString="RiskFactor and hasReversibility some Reversible";
 		OWLDataFactory dataFactory = ontology.getOWLOntologyManager()
                 .getOWLDataFactory();
         // Set up the real parser
