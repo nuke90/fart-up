@@ -140,10 +140,13 @@ public class MyReader implements OWLReader{
 //		res=sdQuery(manager, reasoner, "PREFIX fa: <"+iri+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?k WHERE { Annotation(?p,rdf:label,\"RiskSettingORRef\"),Type(?k,?p),PropertyValue(?k,fa:hasReference,fa:"+reference+")}");
 		
 		//questa versione non considera la reference
-		res=sdQuery(manager, reasoner, "PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?k ?d WHERE { "
+		res=sdQuery(manager, reasoner, "PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> "
+				+ "SELECT ?k ?d WHERE { "
 				+ "Annotation(?p,rdf:label,\"RiskSettingORRef\")"
 				+ ",Type(?k,?p)"
 				+ ",PropertyValue(?k,fa:OddsRatio,?d)"
+				+ ",PropertyValue(?k,fa:hasReference,fa:Deandrea2010)"
+				+ ",PropertyValue(?k,fa:hasRisk,fa:FallIn1Year)"
 				+ "}");
 		
 		System.out.println(res);
@@ -151,17 +154,23 @@ public class MyReader implements OWLReader{
 			
 			String riskSettingORURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "k")).toString();
 			Double value=null;
+			
 			try{
+				
 				String str=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "d")).toString().replaceAll("\"", "");
-//				str=str+"d";
 				value=Double.valueOf(str);
+			
 			}
 			catch(NumberFormatException e)
 			{
+				
 				value=0d;
+				
 			}
+			
 			RiskSettingORRef.put(riskSettingORURI, value);
 			RiskSettingORRiskFactors.put(riskSettingORURI,new ArrayList<>());
+
 		}
 		
 		
@@ -193,7 +202,6 @@ public class MyReader implements OWLReader{
 		for (String string : RiskFactors) {
 			
 			//facciamo un controllo unico per ogni RiskFactor
-			
 			query=prefissi+"SELECT DISTINCT ?k ?o ?f WHERE {"
 					+ "PropertyValue(<"+string+">,fa:isRiskFactorIn,?k)"
 					+ ",PropertyValue(<"+string+">,fa:hasReversibility,?f)"
@@ -201,24 +209,22 @@ public class MyReader implements OWLReader{
 					+ ",DirectSubClassOf(?o,fa:RiskFactorType)"
 					+ ",Type(?j,?o)"
 					+ "}";
-//			query=prefissi+"SELECT ?x ?k WHERE {PropertyValue(<"+string+">,?x,?k)}";
+
 			res=sdQuery(manager, reasoner, query);
-			System.out.println("--------------------QUI-------------------");
-			System.out.println(res);
+
 			for (QueryBinding queryBinding : res) {
+				
 				String riskSettingRefOR=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "k")).getValue();
 				String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "o")).getValue();
 				String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
+			
 				if(RiskSettingORRef.containsKey(new String(riskSettingRefOR))){
-//					RiskSettingORRiskFactorScalar.get(value).add(new RiskFactorImpl(string, RiskFactorType.SCALAR));
-					
-					//come facciamo il controllo sul tipo? Diamo più tipi ad ogni RiskFactor e definiamo una precedenza?
-					
-					
-					
+				
 					RiskSettingORRiskFactors.get(riskSettingRefOR).add(new RiskFactorImpl(string, parseRiskFactorType(type),parseReversibility(reversibility)));
 					System.out.println("scala:"+riskSettingRefOR+"   "+string);
+				
 				}
+			
 			}
 			
 			
@@ -278,9 +284,11 @@ public class MyReader implements OWLReader{
 							+ ",Type(?r,?f)"
 							+ ",DirectSubClassOf(?f,fa:Estimator)"
 							+ "}";
+					
 					res=sdQuery(manager, reasoner, query);
-					System.out.println(res);
+					
 					for (QueryBinding queryBinding : res) {
+						
 						String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "r")).getValue();
 						String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
 						
@@ -311,13 +319,10 @@ public class MyReader implements OWLReader{
 							
 						}
 						
-						System.out.println("determinazione est to fact");
-						
 						riskFactor.addEstimator(estimator);
+					
 					}
 					
-//					System.out.println(res);
-				
 				}
 			
 			}
@@ -372,11 +377,15 @@ public class MyReader implements OWLReader{
 		//creiamo il FeatureSpace
 		
 		try{
+			
 			featureSpace=fsb.build();
+		
 		}
 		catch(IllegalStateException e){
+		
 			e.printStackTrace();
 			return null;
+			
 		}
 		
 		/*
@@ -407,23 +416,30 @@ public class MyReader implements OWLReader{
 					default:
 						break;
 					}
-					//per i comorbidity come facciamo? Vanno aggiunti gli altri RiskFactor prima di poter aggiungere il comorbidity!!!!!
-					
+					//per i comorbidity come facciamo? Vanno aggiunti gli altri RiskFactor prima di poter aggiungere il comorbidity!!!!!		
 				}
+				
 			}
+			
 		}
 		catch(NoSuchElementException e){
+			
 			e.printStackTrace();
 			System.err.println("RiskFactor not found in the feature space");
 			return null;
+		
 		}
 		catch(IllegalArgumentException e){
+			
 			e.printStackTrace();
 			return null;
+		
 		}
 		catch(NullPointerException e){
+		
 			e.printStackTrace();
 			return null;
+		
 		}
 		
 		
@@ -501,7 +517,7 @@ public class MyReader implements OWLReader{
 		
 		
 		
-		System.out.println("ABBIAMO DELLE LISTE POPOLATE DA VARIE COSE, TERNARY E SCALAR SOPRATUTTO");
+		System.out.println("-------------------------------------STAMPA RISKSETTINGORREF E RISKFACTOR A LORO COLLEGATI--------------------------------");
 		
 		
 		for (String string : RiskSettingORRef.keySet()) {
@@ -519,9 +535,12 @@ public class MyReader implements OWLReader{
 		RiskFactorsData output=null;
 		
 		try{
+			
 			output=b.build();
+		
 		}
 		catch(IllegalStateException e){
+		
 			e.printStackTrace();
 			System.err.println("Impossible to build the RiskFactorData from the RiskFactorDataBuilder");
 			
@@ -605,17 +624,25 @@ public class MyReader implements OWLReader{
 	 * @return
 	 */
 	public Set<OWLDataPropertyAssertionAxiom> getIndividualDataProperties(OWLOntology ontology,OWLNamedIndividual ind){
+	
 		Set<OWLDataPropertyAssertionAxiom> dpaxs;
 		dpaxs=ontology.getDataPropertyAssertionAxioms(ind);
 		ontology.getDataPropertiesInSignature(true);
+		
 		for(OWLDataPropertyAssertionAxiom dpax : dpaxs){
+		
 			OWLDataPropertyExpression ex=dpax.getProperty();
 			Set<OWLLiteral> values=ind.getDataPropertyValues(ex,ontology);
 			System.out.println("---"+ex);
+			
 			for(OWLLiteral value:values){
+			
 				System.out.println("---"+value.getLiteral());
+			
 			}
+		
 		}
+		
 		return null;
 	}
 	/**
@@ -625,14 +652,21 @@ public class MyReader implements OWLReader{
 	 * @return the OWLDataProperty or null
 	 */
 	public OWLDataProperty getSpecifiedDataProperty(OWLOntology ontology,String name){
+		
 		Set<OWLDataProperty> properties;
 		OWLDataProperty prop=null;
 		properties=ontology.getDataPropertiesInSignature();
+		
 		for(OWLDataProperty p: properties){
+		
 			if(p.toStringID().matches(".+"+name+".*")){
+			
 				prop=p;
+			
 			}
+		
 		}
+		
 		return prop;
 	}
 	
@@ -666,7 +700,13 @@ public class MyReader implements OWLReader{
 		}
 	}
 	
-	
+	/**
+	 * This function runs a query using the standard SPARQL DL and returns the result
+	 * @param manager The manager of the ontology on which we want to query
+	 * @param reasoner A reasoner on that ontology
+	 * @param query as the name says
+	 * @return the result or null
+	 */
 	public QueryResult sdQuery(OWLOntologyManager manager,OWLReasoner reasoner,String query){
 		Query q=null;
 		
@@ -674,7 +714,7 @@ public class MyReader implements OWLReader{
 		
 		QueryResult res=null;
 //		query="PREFIX fa: <"+iri+"#> SELECT ?p ?x ?r WHERE { Type(?x,fa:OWLClass_a924e8db_a89c_4098_9259_0bbb77acfc04), PropertyValue(?p, fa:isRiskFactorIn, ?x), PropertyValue(?x,fa:OddsRatio,?r)}";
-		System.out.println(query);
+//		System.out.println(query);
 		try {
 			q=Query.create(query);
 			res=qEn.execute(q);
@@ -691,7 +731,11 @@ public class MyReader implements OWLReader{
 		return null;
 	}//fine sdQuery
 	
-	
+	/**
+	 * Returns the RiskFactorType given an URI that points to the RiskFactorType
+	 * @param type
+	 * @return the RiskFactorType or null if not found
+	 */
 	public RiskFactorType parseRiskFactorType (String type){
 		
 		Map<String,RiskFactorType> mappaType;
@@ -706,6 +750,11 @@ public class MyReader implements OWLReader{
 		
 	}
 	
+	/**
+	 * Returns the EstimatorType given an URI that points to the EstimatorType
+	 * @param type
+	 * @return the EstimatorType or null if not found
+	 */
 	public EstimatorType parseEstimatorType (String type){
 		
 		Map<String,EstimatorType> mappaType;
@@ -719,8 +768,14 @@ public class MyReader implements OWLReader{
 		
 	}
 	
+	
+	
+	/**
+	 * Returns the Reversibility given an URI that points to it
+	 * @param reversibility
+	 * @return the Reversibility or null if not found
+	 */
 	public Reversibility parseReversibility (String reversibility){
-//		if()
 		
 		Map<String,Reversibility> mappaType;
 		mappaType=new HashMap<>();
@@ -734,8 +789,12 @@ public class MyReader implements OWLReader{
 		
 	}
 	
+	/**
+	 * Returns the EstimatorToFactorType given an URI that points to the EstimatorToFactorType
+	 * @param type
+	 * @return the EstimatorToFactorType or null if not found
+	 */
 	public EstimatorToFactorType parseEstimatorToFactorType (String type){
-//		if()
 		
 		Map<String,EstimatorToFactorType> mappaType;
 		mappaType=new HashMap<>();
