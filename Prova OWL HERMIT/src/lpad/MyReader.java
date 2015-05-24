@@ -13,6 +13,8 @@ import java.util.Set;
 
 import lpad.features.Factor;
 import lpad.features.FactorSpaceBuilder;
+import lpad.synergy.SynergyOR;
+import lpad.synergy.SynergyTypeBuilder;
 
 import org.semanticweb.HermiT.Configuration;
 import org.semanticweb.HermiT.Reasoner;
@@ -36,6 +38,8 @@ import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.SimpleShortFormProvider;
 
 import sample.feature.FeatureSpace;
+import stat.odds.OddsRatio;
+import stat.odds.OddsRatioImpl;
 import util.stringFunction.NoWhiteLowerCase;
 import de.derivo.sparqldlapi.Query;
 import de.derivo.sparqldlapi.QueryArgument;
@@ -57,13 +61,16 @@ public class MyReader implements OWLReader{
 	/**
 	 * Returns null when there's some kind of error
 	 */
+	private String ontologyURI="http://www.unibo.it/fallrisk";
+	private String prefissi="PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> ";
+	
 	public RiskFactorsData read(Reader reader) {
 		
 		OWLOntology ontology=null;
 //		Set<OWLClass> classes=null;
 //		Set<OWLAnonymousIndividual> individuals=null;
 		OWLReasoner reasoner=null;		
-		String ontologyURI="http://www.unibo.it/fallrisk";
+		
 
 		
 		OWLOntologyManager manager=OWLManager.createOWLOntologyManager();
@@ -123,211 +130,132 @@ public class MyReader implements OWLReader{
 		
 		//contiene gli URI e i rispettivi OddsRatio collegati
 		Map<String,Double> RiskSettingORRef=new HashMap<>();
-		List<String> RiskFactors=new ArrayList<>();
+		List<String> RiskFactorsURIs=new ArrayList<>();
 		Map<String,List<RiskFactorI>> RiskSettingORRiskFactors=new HashMap<>();
+		List<RiskFactorI> riskFactors=new ArrayList<>();
+		
 		
 		@SuppressWarnings("unused")
 		String reference="Deandrea2010";
-		
-		/*
-		 * 
-		 * RiskSettingORRef è collegato da un'annotazione alla classe vera e propria che ha un nome diverso
-		 * QUI LI ESTRAIAMO
-		 */
+		String setting="Community";
+		String risk="FallIn1Year";
+		String query=null;
 		
 		
-		//versione che considera la reference
-//		res=sdQuery(manager, reasoner, "PREFIX fa: <"+iri+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?k WHERE { Annotation(?p,rdf:label,\"RiskSettingORRef\"),Type(?k,?p),PropertyValue(?k,fa:hasReference,fa:"+reference+")}");
+		query=prefissi+"select distinct ?riskfactor ?featureType ?reversibility where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:hasSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:hasReference,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?torf)"
+				+ ",PropertyValue(?torf,fa:hasRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?riskfactor,fa:hasFeatureType,?featureType)"
+				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
+				+ "}";
 		
-		//questa versione non considera la reference
-		res=sdQuery(manager, reasoner, "PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> "
-				+ "SELECT ?k ?d WHERE { "
-				+ "Annotation(?p,rdf:label,\"RiskSettingORRef\")"
-				+ ",Type(?k,?p)"
-				+ ",PropertyValue(?k,fa:OddsRatio,?d)"
-				+ ",PropertyValue(?k,fa:hasReference,fa:Deandrea2010)"
-				+ ",PropertyValue(?k,fa:hasRisk,fa:FallIn1Year)"
-				+ "}");
+		
+		
+		//FIXME dobbiamo sistemare la reversibility all'interno del nostro programma
+		
+		res=sdQuery(manager, reasoner, query);
+		
 		
 		System.out.println(res);
+		System.out.println(res.size());
+		
+		
 		for (QueryBinding queryBinding : res) {
 			
-			String riskSettingORURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "k")).toString();
-			Double value=null;
+			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
+			String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "featureType")).getValue();
+			String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "reversibility")).getValue();
 			
-			try{
-				
-				String str=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "d")).toString().replaceAll("\"", "");
-				value=Double.valueOf(str);
 			
-			}
-			catch(NumberFormatException e)
-			{
-				
-				value=0d;
-				
-			}
+			RiskFactorI rf=new RiskFactorImpl(URI, parseRiskFactorType(type),parseReversibility(reversibility));
 			
-			RiskSettingORRef.put(riskSettingORURI, value);
-			RiskSettingORRiskFactors.put(riskSettingORURI,new ArrayList<>());
-
+			riskFactors.add(rf);
+			System.out.println("aggiunto:"+rf);
 		}
 		
 		
-		//adesso abbiamo una lista di ORRef collegati a dei RiskFactor, troviamo quei RiskFactor
 		
-		//dobbiamo determinare che tipo di riskFactor è, se Ternary, Scalar o Synergy
-		String query=null;
-		String prefissi="PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> ";
+		//parte per la determinazione dell'oddsratio
+		query=prefissi+"select ?oddsRatio ?riskFactor where{"
+		+ "Annotation(?p,rdf:label,\"RiskSettingORRef\")"
+		+ ",Type(?orRef,?p)"
+		+ ",PropertyValue(?orRef,fa:hasSetting,fa:"+setting+")"
+		+ ",PropertyValue(?orRef,fa:hasReference,fa:"+reference+")"
+		+ ",PropertyValue(?orRef,fa:hasRisk,fa:"+risk+")"
+		+ ",PropertyValue(?orRef,fa:hasRiskFactor,?riskFactor)"
+		+ ",PropertyValue(?orRef,fa:OddsRatio,?oddsRatio)"
+		+ "}";
 		
-		for (String string : RiskSettingORRef.keySet()) {
+		
+		res=sdQuery(manager, reasoner, query);
+		System.out.println(res);
+		
+		for(QueryBinding queryBinding:res){
+			double oddsRatio=0;
+			try{
+				oddsRatio=Double.parseDouble(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "oddsRatio")).getValue());
+			}
+			catch(NumberFormatException e){
+				oddsRatio=0;
+			}
+			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
+			
+			for(RiskFactorI riskFactor:riskFactors){
+				
+				if(riskFactor.getURI().compareTo(URI)==0){
 					
-			query=prefissi+"SELECT ?k WHERE {PropertyValue(<"+string+">,fa:hasRiskFactor,?k)}";
+					riskFactor.setOddsRatio(oddsRatio);
+					
+				}
+				
+			}
+			
+		}
+		
+		
+		//qui controlliamo se qualcosa è synergic o meno
+		
+		for(RiskFactorI riskFactor:riskFactors){
+			
+			query=prefissi+" select ?riskFactor where{"
+					+ "Type(?sin,fa:SinergicFactorsToFactor)"
+					+ ",PropertyValue(?sin,fa:hasOutputRiskFactor,<"+riskFactor.getURI()+">)"
+					+ ",PropertyValue(?sin,fa:hasSinergicRiskFactor,?riskFactor)"
+					+ "}";
+			
 			res=sdQuery(manager, reasoner, query);
+			
 			System.out.println(res);
 			
-			for (QueryBinding queryBinding : res) {
-			
-				String value=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "k")).getValue();
-				RiskFactors.add(value);
-				System.out.println(string+"   "+value);
+			if(res.size()!=0){
+				//aggiunta
 				
-			}
-			
-		}
-		
-//		provaQuery(manager, reasoner);
-		
-		
-		for (String string : RiskFactors) {
-			
-			//facciamo un controllo unico per ogni RiskFactor
-			query=prefissi+"SELECT DISTINCT ?k ?o ?f WHERE {"
-					+ "PropertyValue(<"+string+">,fa:isRiskFactorIn,?k)"
-					+ ",PropertyValue(<"+string+">,fa:hasReversibility,?f)"
-					+ ",PropertyValue(<"+string+">,fa:hasRiskFactorType,?j)"
-					+ ",DirectSubClassOf(?o,fa:RiskFactorType)"
-					+ ",Type(?j,?o)"
-					+ "}";
-
-			res=sdQuery(manager, reasoner, query);
-
-			for (QueryBinding queryBinding : res) {
+				//modifichiamo il tipo così possiamo riconoscerlo dopo
+				riskFactor.setType(RiskFactorType.SINERGY);
 				
-				String riskSettingRefOR=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "k")).getValue();
-				String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "o")).getValue();
-				String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
-			
-				if(RiskSettingORRef.containsKey(new String(riskSettingRefOR))){
-				
-					RiskSettingORRiskFactors.get(riskSettingRefOR).add(new RiskFactorImpl(string, parseRiskFactorType(type),parseReversibility(reversibility)));
-					System.out.println("scala:"+riskSettingRefOR+"   "+string);
-				
-				}
-			
-			}
-			
-			
-		}
-
-		
-		
-		/*
-		 * Associamo le parti sinergiche e associamole al ComorbidityRiskFactor
-		 * 
-		 */
-		
-		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
-			for(RiskFactorI riskFactor : lista){
-				if(riskFactor.getType()==RiskFactorType.SINERGY){
-					query=prefissi+"SELECT DISTINCT ?r ?o ?f "
-							+ "WHERE {Type(?k,fa:SinergicFactorsToFactor),"
-							+ "PropertyValue(?k,fa:isRiskFactorTypeOf,<"+riskFactor.getURI()+">)"
-							+ ",PropertyValue(?k,fa:hasSinergicRiskFactor,?r)"
-							+ ",PropertyValue(?r,fa:hasReversibility,?f)"
-							+ ",PropertyValue(?r,fa:hasRiskFactorType,?j)"
-							+ ",DirectSubClassOf(?o,fa:RiskFactorType),Type(?j,?o)"
-							+ "}";
-					res=sdQuery(manager, reasoner, query);
-					System.out.println(res);
-					for (QueryBinding queryBinding : res) {
-						String uri=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "r")).getValue();
-						String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "o")).getValue();
-						String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
-						
-						riskFactor.addSinergyRiskFactor(new RiskFactorImpl(uri, parseRiskFactorType(type),parseReversibility(reversibility)));
-					}
-				}//fine if
-			}
-		}
-		
-		/*
-		 * IN QUESTA PARTE ASSOCIAMO GLI ESTIMATOR AI RISK FACTOR(il collegamento viene dedotto usando le istanze di EstimatorsToFactor che hanno come requisiti
-		 * quello di avere un RiskFactor e un Estimator(possono avere tipi diversi, sia di ternary che di scalar)
-		 * 
-		 */
-		
-		System.out.println("///////////////////////////////RICERCA ESTIMATOR");
-		
-		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
-		
-			for(RiskFactorI riskFactor : lista){
-				
-				if(riskFactor.getType()==RiskFactorType.SCALAR || riskFactor.getType()==RiskFactorType.TERNARY){
-
-					//qui abbiamo tutti i riskfactor scalar e anche i ternary, a cui associare gli estimator
+				for(QueryBinding queryBinding:res){
 					
-					query=prefissi+"SELECT DISTINCT ?r ?f WHERE{"
-							+ "Type(?k,fa:EstimatorsToFactor)"
-							+ ",PropertyValue(?k,fa:hasRiskFactor,<"+riskFactor.getURI()+">)"
-							+ ",PropertyValue(?k,fa:hasEstimator,?r)"
-							+ ",Type(?r,?f)"
-							+ ",DirectSubClassOf(?f,fa:Estimator)"
-							+ "}";
+					String uri=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
 					
-					res=sdQuery(manager, reasoner, query);
-					
-					for (QueryBinding queryBinding : res) {
+					for(RiskFactorI rf:riskFactors){
 						
-						String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "r")).getValue();
-						String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
+						if(uri.compareTo(rf.getURI())==0) riskFactor.addSinergyRiskFactor(rf);
 						
-						EstimatorI estimator=new EstimatorImpl(URI,parseEstimatorType(type));
-						QueryResult res1;
-						//adesso che abbiamo l'estimator dobbiamo collegare a sua volta un EstimatorToFactor
-						
-						query=prefissi+"SELECT DISTINCT ?r ?f WHERE{"
-								+ ""
-								+ "PropertyValue(?r,fa:hasEstimator,<"+URI+">)"
-								+ ",PropertyValue(?r,fa:hasRiskFactor,<"+riskFactor.getURI()+">)"
-								+ ",Type(?r,?f)"
-								+ ",DirectSubClassOf(?f,fa:EstimatorsToFactor)"
-								+ "}";
-						res1=sdQuery(manager, reasoner, query);
-//						System.out.println(res1);
-						
-						for(QueryBinding queryBinding1 : res1){
-							
-							String URI1=queryBinding1.get(new QueryArgument(QueryArgumentType.VAR, "r")).getValue();
-							String type1=queryBinding1.get(new QueryArgument(QueryArgumentType.VAR, "f")).getValue();
-							EstimatorToFactorType typeParsed;
-							typeParsed=parseEstimatorToFactorType(type1);
-							
-							EstimatorToFactorI etf=new EstimatorToFactorImpl(URI1, typeParsed);
-							estimator.addEstimatorToFactor(etf);
-							
-							
-						}
-						
-						riskFactor.addEstimator(estimator);
-					
 					}
 					
 				}
-			
-			}
+				
+			}//fine if size
 		
-		}
+		}//fine for
+		
+	
+		//fino a qui sembra funzionare ma molto lento
+		System.out.println("fermino");
+		
 		
 		
 		//conviene creare prima un mondo di istanze
@@ -341,9 +269,9 @@ public class MyReader implements OWLReader{
         b.setHealthyFall(FRATupConsts.instance().defaultHealthyFall());
 		
 		
-		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
+		
 			
-			for(RiskFactorI riskFactor : lista){
+			for(RiskFactorI riskFactor : riskFactors){
 				
 				boolean isReversible;
 				
@@ -358,9 +286,54 @@ public class MyReader implements OWLReader{
 					break;
 
 				case SCALAR:
-					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
-					fsb.addScalarType(riskFactor.getURI(), 10, isReversible);
+					
+//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
+					
+					query=prefissi+"select ?maxLevel where{"
+							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:hasRiskFactorType,?riskFactorType)"
+							+ ",PropertyValue(?riskFactorType,fa:RiskFactorMaxLevel,?maxLevel)"
+							+ "}";
+					res=sdQuery(manager, reasoner, query);
+					
+					int maxLevel;
+					
+					try{
+						maxLevel=Integer.parseInt(res.get(0).get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue());
+					}
+					catch(NumberFormatException e){
+						maxLevel=0;
+					}
+					
+					//qui dobbiamo anche controllare se è synergic o meno
+					
+					
+					fsb.addScalarType(riskFactor.getURI(), maxLevel, isReversible);
+					
 					break;
+//				case SINERGY:
+//					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
+//					
+//					query=prefissi+"select ?maxLevel where{"
+//							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:hasRiskFactorType,?riskFactorType)"
+//							+ ",PropertyValue(?riskFactorType,fa:RiskFactorMaxLevel,?maxLevel)"
+//							+ "}";
+//					res=sdQuery(manager, reasoner, query);
+//					
+//					
+//					
+//					try{
+//						maxLevel=Integer.parseInt(res.get(0).get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue());
+//					}
+//					catch(NumberFormatException e){
+//						maxLevel=0;
+//					}
+//					
+//					//qui dobbiamo anche controllare se è synergic o meno
+//					
+//					
+//					fsb.addScalarType(riskFactor.getURI(), maxLevel, isReversible);
+//					
+//					break;
 				default:
 					break;
 				
@@ -370,7 +343,7 @@ public class MyReader implements OWLReader{
 				//FIXME Vanno aggiunti tutti i RiskFactor prima di andare sui comorbidity!!!
 			}	
 				
-		}
+
 		
 
 		
@@ -394,32 +367,30 @@ public class MyReader implements OWLReader{
 		 */
 		
 		try{
-		
-			for(String riskSettingURI:RiskSettingORRiskFactors.keySet()){
-				
-				for (RiskFactorI riskFactor : RiskSettingORRiskFactors.get(riskSettingURI)){
 						
-					switch (riskFactor.getType()) {
-					case TERNARY:
-						b.setTernaryRiskFactor(featureSpace.getType(riskFactor.getURI()), RiskSettingORRef.get(riskSettingURI), true);
-						break;
-	
-					case SCALAR:
-						//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
-						b.addScalarFactor(featureSpace.getType(riskFactor.getURI()), RiskSettingORRef.get(riskSettingURI), true);
-						break;
-						
-					case SINERGY:
-						//non possiamo fare niente siccome in questa parte preliminare mancano molti RiskFactor e ci servono tutti nelle istanze per poterli aggiungere
-						//FIXME BISOGNA SISTEMARE LA COMORBIDITY!!!!!!!!
-						break;
-					default:
-						break;
-					}
-					//per i comorbidity come facciamo? Vanno aggiunti gli altri RiskFactor prima di poter aggiungere il comorbidity!!!!!		
+			for (RiskFactorI riskFactor : riskFactors){
+					
+				switch (riskFactor.getType()) {
+				case TERNARY:
+					b.setTernaryRiskFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
+					break;
+
+				case SCALAR:
+					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
+					b.addScalarFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
+					break;
+					
+				case SINERGY:
+					//non possiamo fare niente siccome in questa parte preliminare mancano molti RiskFactor e ci servono tutti nelle istanze per poterli aggiungere
+					//FIXME BISOGNA SISTEMARE LA COMORBIDITY!!!!!!!!
+
+					break;
+				default:
+					break;
 				}
-				
+				//per i comorbidity come facciamo? Vanno aggiunti gli altri RiskFactor prima di poter aggiungere il comorbidity!!!!!		
 			}
+
 			
 		}
 		catch(NoSuchElementException e){
@@ -445,39 +416,27 @@ public class MyReader implements OWLReader{
 		
 		
 		
-		/*
-		 * 
-		 * PARTE COMORBIDITY NON ANCORA UTILIZZABILE
-		 * 
-		 
-		for(String riskSettingORURI : RiskSettingORRiskFactors.keySet()){
+		for(RiskFactorI riskFactor:riskFactors){
+			
+			if(riskFactor.getType()==RiskFactorType.SINERGY){
 				
-			for(RiskFactorI riskFactor : RiskSettingORRiskFactors.get(riskSettingORURI)){
+				final SynergyTypeBuilder comorbidityB = new SynergyTypeBuilder(riskFactor.getURI());
 				
-				if(riskFactor.getType()==RiskFactorType.SINERGY) {
+				for(RiskFactorI rf:riskFactor.getSinergyRiskFactors()){
 					
-					SynergyTypeBuilder comorbidityB = new SynergyTypeBuilder(riskFactor.getURI());
+					comorbidityB.addFactor(featureSpace.getType(rf.getURI()));
 					
-					for(RiskFactorI rf:riskFactor.getSinergyRiskFactors()){
-						comorbidityB.addFactor(featureSpace.getType(rf.getURI()));
-					}
-					
-					try{
-						SynergyOR comorbidity=SynergyOR.createFixedOR(comorbidityB.build(), OddsRatioImpl.create(RiskSettingORRef.get(riskSettingORURI)));
-						b.addSynergy(comorbidity,true);
-					}
-					catch(Exception e){
-						e.printStackTrace();
-						System.err.println("Impossible to create this comorbidity factor:"+riskFactor.getURI());
-						return null;
-					}
-					
-				}				
-				//FIXME Vanno aggiunti tutti i RiskFactor prima di andare sui comorbidity!!!
-			}	
+				}
+				
+				final SynergyOR comorbidity =
+		                SynergyOR.createFixedOR(
+		                comorbidityB.build(),
+		                OddsRatioImpl.create(riskFactor.getOddsRatio()));
+				b.addSynergy(comorbidity,true);
+				
+			}
 			
 		}
-		*/
 		
 		
 		
@@ -736,7 +695,7 @@ public class MyReader implements OWLReader{
 	 * @param type
 	 * @return the RiskFactorType or null if not found
 	 */
-	public RiskFactorType parseRiskFactorType (String type){
+public RiskFactorType parseRiskFactorType (String type){
 		
 		Map<String,RiskFactorType> mappaType;
 		mappaType=new HashMap<>();
@@ -745,10 +704,50 @@ public class MyReader implements OWLReader{
 		mappaType.put("http://www.unibo.it/fallrisk#TernaryFeatureType",RiskFactorType.TERNARY);
 		mappaType.put("http://www.unibo.it/fallrisk#SinergyRiskFactorType",RiskFactorType.SINERGY);
 		
-		return mappaType.get(type);
-		
-		
+		if(mappaType.get(type)!=null){
+			return mappaType.get(type);
+		}
+		else{
+			return RiskFactorType.SCALAR;
+			//SE UNKNOWN BISOGNA CONTINUARE NELLA RICERCA
+		}
+	
 	}
+
+//public RiskFactorType findUnknownRiskFactorType (String type,OWLOntologyManager manager,OWLReasoner reasoner){
+//	
+//	Map<String,RiskFactorType> mappaType;
+//	mappaType=new HashMap<>();
+//	
+//	mappaType.put("http://www.unibo.it/fallrisk#ScalarRiskFactorType",RiskFactorType.SCALAR );
+//	mappaType.put("http://www.unibo.it/fallrisk#TernaryFeatureType",RiskFactorType.TERNARY);
+//	mappaType.put("http://www.unibo.it/fallrisk#SinergyRiskFactorType",RiskFactorType.SINERGY);
+//	
+//	QueryResult res;
+//	
+//	String query=prefissi+" select ?tipo where{"
+//			+ "Type(<"+"type"+">,?tipo"
+//			+ ",DirectSubClassOf(?tipo,fa:RiskFactorType)"
+//			+ "}";
+//	
+//	res=sdQuery(manager, reasoner, query);
+//	
+//	for(QueryBinding queryBinding:res){
+//		String tipo;
+//		tipo=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue();
+//		
+//		if(tipo.compareTo("http://www.unibo.it/fallrisk#ScalarRiskFactorType")==0){
+//			return RiskFactorType.SCALAR;
+//		}
+//		else if(tipo.compareTo("http://www.unibo.it/fallrisk#SinergyRiskFactorType")==0)
+//		
+//		
+//	}
+//	
+//	return RiskFactorType.UNKNOWN;
+//
+//}
+	
 	
 	/**
 	 * Returns the EstimatorType given an URI that points to the EstimatorType
