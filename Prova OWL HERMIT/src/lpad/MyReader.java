@@ -11,6 +11,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
+
 import lpad.features.Factor;
 import lpad.features.FactorSpaceBuilder;
 import lpad.synergy.SynergyOR;
@@ -18,9 +22,12 @@ import lpad.synergy.SynergyTypeBuilder;
 
 import org.semanticweb.HermiT.Configuration;
 import org.semanticweb.HermiT.Reasoner;
+import org.semanticweb.HermiT.Reasoner.ReasonerFactory;
+import org.semanticweb.HermiT.examples.Explanations;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.io.OWLOntologyDocumentSource;
 import org.semanticweb.owlapi.io.ReaderDocumentSource;
+import org.semanticweb.owlapi.model.OWLAxiom;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLDataProperty;
@@ -31,11 +38,19 @@ import org.semanticweb.owlapi.model.OWLNamedIndividual;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
+import org.semanticweb.owlapi.reasoner.InconsistentOntologyException;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.SimpleShortFormProvider;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
+
+import com.clarkparsia.owlapi.explanation.BlackBoxExplanation;
+import com.clarkparsia.owlapi.explanation.HSTExplanationGenerator;
+import com.clarkparsia.pellet.owlapiv3.PelletReasonerFactory;
 
 import sample.feature.FeatureSpace;
 import stat.odds.OddsRatio;
@@ -61,8 +76,9 @@ public class MyReader implements OWLReader{
 	/**
 	 * Returns null when there's some kind of error
 	 */
-	private String ontologyURI="http://www.unibo.it/fallrisk";
+	private String ontologyURI="http://ai.unibo.it/on2risk";
 	private String prefissi="PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> ";
+	OWLReasoner reasonerHermitInstance,reasonerPelletInstance;
 	
 	public RiskFactorsData read(Reader reader) {
 		
@@ -71,8 +87,7 @@ public class MyReader implements OWLReader{
 //		Set<OWLAnonymousIndividual> individuals=null;
 		OWLReasoner reasoner=null;		
 		
-
-		
+	    
 		OWLOntologyManager manager=OWLManager.createOWLOntologyManager();
 		OWLOntologyDocumentSource docSource=new ReaderDocumentSource(reader);
 		
@@ -85,19 +100,32 @@ public class MyReader implements OWLReader{
 		}
 		
 		
-		//creazione Reasoner
-		//configurazione del reasoner
-		Configuration conf=new Configuration();
-		//questo server perché il datatype reversible non è supportato da OWL 2, per farlo funzionare ci vuole questa configurazione
-		conf.ignoreUnsupportedDatatypes=true;
-		
-		reasoner=new Reasoner(conf, ontology);
-//		reasoner = new Reasoner(ontology);
-//		if(reasoner==null) return null;
-		
-		
+//		reasoner=getReasonerHermit(ontology);
+
+
+//		System.out.println("Is the ontology consistent? "+reasoner.isConsistent());
 		
 		QueryResult res;
+		
+//		String q;
+//		BufferedReader buffR=new BufferedReader(new InputStreamReader(System.in));
+//		
+//		try {
+//			System.out.println("INSERIMENTO QUERY, per uscire CTRL+Z");
+//			while((q=buffR.readLine())!=null){
+//				q=prefissi+q;
+//				res=sdQuery(manager, reasoner, q);
+//				System.out.println(res);
+//			}
+//		} catch (IOException e1) {
+//			// TODO Auto-generated catch block
+//			e1.printStackTrace();
+//		}
+		
+		
+		
+		System.out.println("ok");
+		
 		
 //		res=sdQuery(manager, reasoner, "PREFIX fa: <"+iri+"#> SELECT ?p ?x ?r WHERE { ?etType(?x,fa:OWLClass_a924e8db_a89c_4098_9259_0bbb77acfc04), PropertyValue(?p, fa:isRiskFactorIn, ?x), PropertyValue(?x,fa:OddsRatio,?r)}");
 		
@@ -133,67 +161,62 @@ public class MyReader implements OWLReader{
 		List<String> RiskFactorsURIs=new ArrayList<>();
 		Map<String,List<RiskFactorI>> RiskSettingORRiskFactors=new HashMap<>();
 		List<RiskFactorI> riskFactors=new ArrayList<>();
-		
+		Map<String, EstimatorI> estimators=new HashMap<>();
 		
 		@SuppressWarnings("unused")
 		String reference="Deandrea2010";
 		String setting="Community";
 		String risk="FallIn1Year";
 		String query=null;
+
+		//per questa usiamo hermit che mi sembra più veloce
+		
+		reasoner=getReasonerPellet(ontology);
+		
+//		query=prefissi+"select distinct ?torfsr ?riskfactor where{"
+//				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+//				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+//				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+//				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?torf)"
+//				+ ",PropertyValue(?torf,fa:isAboutRiskFactor,?riskfactor)"
+////				+ ",PropertyValue(?riskfactor,fa:hasFeatureType,?featureType)"
+////				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
+//				+ "}";
+		
+		//possiamo anche ottenere i rf semplicemente basandoci sull'odds ratio e poi partire di lì.
+
 		
 		
-		query=prefissi+"select distinct ?riskfactor ?featureType ?reversibility where{"
-				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
-				+ ",PropertyValue(?torfsr,fa:hasSetting,fa:"+setting+")"
-				+ ",PropertyValue(?torfsr,fa:hasReference,fa:"+reference+")"
-				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?torf)"
-				+ ",PropertyValue(?torf,fa:hasRiskFactor,?riskfactor)"
-				+ ",PropertyValue(?riskfactor,fa:hasFeatureType,?featureType)"
-				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
+		
+		
+		query=prefissi+"select distinct ?riskfactor ?oddsRatio where{"
+				+ "Type(?torfsr,fa:RiskSettingOddsRatioRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:OddsRatio,?oddsRatio)"
+				+ ",PropertyValue(?torfsr,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?torfsr,fa:isAboutRisk,fa:"+risk+")"
+//				+ ",PropertyValue(?riskfactor,fa:hasFeatureType,?featureType)"
+//				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
 				+ "}";
-		
-		
 		
 		//FIXME dobbiamo sistemare la reversibility all'interno del nostro programma
 		
 		res=sdQuery(manager, reasoner, query);
 		
+		//FIXME bisogna aggiungere anche le prevalence
 		
 		System.out.println(res);
-		System.out.println(res.size());
 		
-		
+		//QUI ESTRAIAMO TUTTI GLI ESTIMATOR E LI COLLEGHIAMO AI RISKFACTOR
+
+
 		for (QueryBinding queryBinding : res) {
 			
 			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
-			String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "featureType")).getValue();
-			String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "reversibility")).getValue();
+//			String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "featureType")).getValue();
+//			String reversibility=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "reversibility")).getValue();
 			
-			
-			RiskFactorI rf=new RiskFactorImpl(URI, parseRiskFactorType(type),parseReversibility(reversibility));
-			
-			riskFactors.add(rf);
-			System.out.println("aggiunto:"+rf);
-		}
-		
-		
-		
-		//parte per la determinazione dell'oddsratio
-		query=prefissi+"select ?oddsRatio ?riskFactor where{"
-		+ "Annotation(?p,rdf:label,\"RiskSettingORRef\")"
-		+ ",Type(?orRef,?p)"
-		+ ",PropertyValue(?orRef,fa:hasSetting,fa:"+setting+")"
-		+ ",PropertyValue(?orRef,fa:hasReference,fa:"+reference+")"
-		+ ",PropertyValue(?orRef,fa:hasRisk,fa:"+risk+")"
-		+ ",PropertyValue(?orRef,fa:hasRiskFactor,?riskFactor)"
-		+ ",PropertyValue(?orRef,fa:OddsRatio,?oddsRatio)"
-		+ "}";
-		
-		
-		res=sdQuery(manager, reasoner, query);
-		System.out.println(res);
-		
-		for(QueryBinding queryBinding:res){
 			double oddsRatio=0;
 			try{
 				oddsRatio=Double.parseDouble(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "oddsRatio")).getValue());
@@ -201,13 +224,132 @@ public class MyReader implements OWLReader{
 			catch(NumberFormatException e){
 				oddsRatio=0;
 			}
-			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
+			
+			RiskFactorI rf=new RiskFactorImpl(URI,oddsRatio);
+			
+			riskFactors.add(rf);
+			System.out.println("aggiunto:"+rf);
+		}
+		
+		//QUI ESTRAIAMO TUTTI GLI ESTIMATOR E LI COLLEGHIAMO AI RISKFACTOR
+		/*soluzione perfetta per estrarre tutto
+		query=prefissi+"select distinct ?riskfactor ?estimator where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?estToF,fa:isAboutEstimator,?estimator)"
+				+ "} "
+				+ "or where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?estToF,fa:hasEstimatorInequality,?estimatorIn)"
+				+ ",PropertyValue(?estimatorIn,fa:isAboutEstimator,?estimator)"
+				+ "}"
+				+ "or where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?estToF,fa:hasEstimatorInterpretation,?estimatorIn)"
+				+ ",PropertyValue(?estimatorIn,fa:isAboutEstimator,?estimator)"
+				+ "}";
+		*/
+		
+		//estraiamo un tipo di estimator alla volta
+		
+		//prima i constantTernary
+		
+		query=prefissi+"select distinct ?riskfactor ?estimator ?question where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?estToF,fa:isAboutEstimator,?estimator)"
+				+ ",PropertyValue(?estimator,fa:Question,?question)"
+				+ "}";
+		
+		
+		res=sdQuery(manager, reasoner, query);
+		
+		System.out.println(res);
+		
+		for(QueryBinding queryBinding:res){
+			
+			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
+			String estURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimator")).getValue();
+			String question=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "question")).getValue();
 			
 			for(RiskFactorI riskFactor:riskFactors){
 				
-				if(riskFactor.getURI().compareTo(URI)==0){
+				if(riskFactor.getURI().compareTo(rfURI)==0){
 					
-					riskFactor.setOddsRatio(oddsRatio);
+					EstimatorI estimator=new EstimatorImpl(estURI, EstimatorType.TERNARY,question);
+					riskFactor.addEstimator(estimator);
+					
+				}
+				
+			}
+			
+		}
+		
+		//adesso gli scalar inequality
+		
+		//FIXME sistemare la question all'interno dell'ontologia
+		
+		query=prefissi+"select distinct ?riskfactor ?estimator ?scalarValue ?inequality ?estimatorMin ?estimatorMax where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",PropertyValue(?estToF,fa:hasEstimatorInequality,?estimatorIn)"
+				+ ",PropertyValue(?estimatorIn,fa:ScalarEstimatorValue,?scalarValue)"
+				+ ",PropertyValue(?estimatorIn,fa:Inequality,?inequality)"
+				+ ",PropertyValue(?estimatorIn,fa:isAboutEstimator,?estimator)"
+				+ ",PropertyValue(?estimator,fa:EstimatorMinValue,?estimatorMin)"
+				+ ",PropertyValue(?estimator,fa:EstimatorMaxValue,?estimatorMax)"
+				+ "}";
+		
+		res=sdQuery(manager, reasoner, query);
+		
+		System.out.println(res);
+		
+		for(QueryBinding queryBinding:res){
+			
+			int max,min,scalarValue;
+
+			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
+			String estURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimator")).getValue();
+			String inequality=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "inequality")).getValue();
+			
+			try{
+				max=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorMax")).getValue());
+				min=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorMin")).getValue());
+				scalarValue=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "scalarValue")).getValue());
+			}
+			catch(NumberFormatException e){
+				System.err.println("Impossible to parse int value of: "+estURI);
+				max=-1;
+				min=-1;
+				scalarValue=-1;
+			}
+			
+
+//			String question=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "question")).getValue();
+			
+			for(RiskFactorI riskFactor:riskFactors){
+				
+				if(riskFactor.getURI().compareTo(rfURI)==0){
+					
+					EstimatorI estimator=new EstimatorImpl(estURI, EstimatorType.SCALAR_INEQUALITY,max,min,scalarValue,parseInequalityType(inequality));
+					riskFactor.addEstimator(estimator);
 					
 				}
 				
@@ -216,39 +358,263 @@ public class MyReader implements OWLReader{
 		}
 		
 		
-		//qui controlliamo se qualcosa è synergic o meno
 		
-		for(RiskFactorI riskFactor:riskFactors){
+		//adesso invece estraiamo gli scalar a livelli
+		
+		
+		query=prefissi+"select distinct ?riskfactor ?estimator ?estimatorLevels ?lastStep ?stepSize ?firstStep ?estimatorMin ?estimatorMax where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",Type(?estToF,fa:MaxOfInterpretations)"
+				+ ",PropertyValue(?estToF,fa:hasEstimatorInterpretation,?estimatorLevels)"
+				+ ",PropertyValue(?estimatorLevels,fa:isAboutEstimator,?estimator)"
+				+ ",PropertyValue(?estimatorLevels,fa:LastStep,?lastStep)"
+				+ ",PropertyValue(?estimatorLevels,fa:Step1Start,?firstStep)"
+				+ ",PropertyValue(?estimatorLevels,fa:StepSize,?stepSize)"
+				+ ",PropertyValue(?estimator,fa:EstimatorMinValue,?estimatorMin)"
+				+ ",PropertyValue(?estimator,fa:EstimatorMaxValue,?estimatorMax)"
+				+ "}";
+		
+		res=sdQuery(manager, reasoner, query);
+		
+		System.out.println(res);
+		
+		
+		for(QueryBinding queryBinding:res){
 			
-			query=prefissi+" select ?riskFactor where{"
-					+ "Type(?sin,fa:SinergicFactorsToFactor)"
-					+ ",PropertyValue(?sin,fa:hasOutputRiskFactor,<"+riskFactor.getURI()+">)"
-					+ ",PropertyValue(?sin,fa:hasSinergicRiskFactor,?riskFactor)"
+			int max,min,firstStep,stepSize,lastStep;
+
+			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
+			String estURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimator")).getValue();
+			String estDiscreteLevelsURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorLevels")).getValue();
+			
+			try{
+				max=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorMax")).getValue());
+				min=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorMin")).getValue());
+				firstStep=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "firstStep")).getValue());
+				lastStep=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "lastStep")).getValue());
+				stepSize=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "stepSize")).getValue());
+				
+			}
+			catch(NumberFormatException e){
+				System.err.println("Impossible to parse int value of: "+estURI);
+				max=-1;
+				min=-1;
+				stepSize=-1;
+				lastStep=-1;
+				firstStep=-1;
+			}
+			
+
+			//otteniamo anche le prevalence dei livelli
+			Map<Integer,Double> levelPrevalence=new HashMap<>();
+			
+			query=prefissi+"select distinct ?riskFactorLevel ?riskFactorLevelProbability where{"
+					+ "Type(?rfdl,fa:RiskFactorLevelPrevalence)"
+					+ ",PropertyValue(?rfdl,fa:isRiskFactorLevelPrevalenceOf,?rfp)"
+					+ ",PropertyValue(?rfp,fa:isAboutRiskFactor,<"+rfURI+">)"
+					+ ",PropertyValue(?rfp,fa:isAboutSetting,fa:"+setting+")"
+					+ ",PropertyValue(?rfdl,fa:RiskFactorLevel,?riskFactorLevel)"
+					+ ",PropertyValue(?rfdl,fa:Probability,?riskFactorLevelProbability)"
 					+ "}";
 			
-			res=sdQuery(manager, reasoner, query);
+			QueryResult res2=sdQuery(manager, reasoner, query);
 			
-			System.out.println(res);
+			System.out.println(res2);
 			
-			if(res.size()!=0){
-				//aggiunta
+			for(QueryBinding qb:res2){
 				
-				//modifichiamo il tipo così possiamo riconoscerlo dopo
-				riskFactor.setType(RiskFactorType.SINERGY);
+				int level;
+				double probability;
 				
-				for(QueryBinding queryBinding:res){
+				try{
 					
-					String uri=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
+					level=Integer.parseInt(qb.get(new QueryArgument(QueryArgumentType.VAR, "riskFactorLevel")).getValue());
+					probability=Double.parseDouble(qb.get(new QueryArgument(QueryArgumentType.VAR, "riskFactorLevelProbability")).getValue());
 					
-					for(RiskFactorI rf:riskFactors){
+				}
+				catch(NumberFormatException e){
+					
+					System.err.println("Impossible to parse int value of: "+estURI);
+					level=-1;
+					probability=-1;
+					
+				}
+				
+				levelPrevalence.put(level, probability);
+				
+			}
+			//abbiamo finito con i livelli e le sue prevalenze
+			
+//			String question=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "question")).getValue();
+			
+			for(RiskFactorI riskFactor:riskFactors){
+				
+				if(riskFactor.getURI().compareTo(rfURI)==0){
+					
+					EstimatorI estimator=new EstimatorImpl(estURI, EstimatorType.SCALAR_LEVELS,max,min,firstStep,stepSize,lastStep);
+					riskFactor.addEstimator(estimator);
+					riskFactor.setLevelPrevalences(levelPrevalence);
+					
+				}
+				
+			}
+			
+		}
+		
+		
+		//abbiamo aggiunto inequality, scalar e ternary, ci mancano i sinergic
+		
+		
+		//--------------------------------------------QUI AGGIUNGIAMO GLI ESTIMATOR DI TIPO SINERGIC------------------------------------
+		
+		
+		query=prefissi+"select distinct ?riskfactor ?sinergicRF where{"
+				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
+				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
+				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
+				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
+				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
+				+ ",Type(?estToF,fa:SinergicFactorsToFactor)"
+				+ ",PropertyValue(?estToF,fa:hasSinergicRiskFactor,?sinergicRF)"
+				+ "}";
+		
+		
+		res=sdQuery(manager, reasoner, query);
+		
+		System.out.println(res);
+		
+		for(QueryBinding queryBinding:res){
+			
+			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
+			String sinergicRFURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "sinergicRF")).getValue();
+			
+			for(RiskFactorI riskFactor:riskFactors){
+				
+				if(riskFactor.getURI().compareTo(rfURI)==0){
+					
+					riskFactor.setType(RiskFactorType.SINERGY);
+					
+					for(RiskFactorI riskFactorSin:riskFactors){
 						
-						if(uri.compareTo(rf.getURI())==0) riskFactor.addSinergyRiskFactor(rf);
+						if(riskFactorSin.getURI().compareTo(sinergicRFURI)==0){
+							
+							riskFactor.addSinergyRiskFactor(riskFactorSin);
+							
+						}
 						
 					}
 					
 				}
 				
-			}//fine if size
+			}
+			
+		}
+		
+		
+		//qui usiamo pellet
+		
+		reasoner=getReasonerPellet(ontology);
+		
+		//parte per la determinazione dell'oddsratio
+//		query=prefissi+"select ?orRef ?riskFactor ?oddsRatio where{"
+//		+ "Type(?orRef,fa:RiskSettingOddsRatioRef)"
+//		+ ",PropertyValue(?orRef,fa:isAboutSetting,fa:"+setting+")"
+//		+ ",PropertyValue(?orRef,fa:supportedByRef,fa:"+reference+")"
+//		+ ",PropertyValue(?orRef,fa:isAboutRisk,fa:"+risk+")"
+//		+ ",PropertyValue(?orRef,fa:isAboutRiskFactor,?riskFactor)"
+//		+ ",PropertyValue(?orRef,fa:OddsRatio,?oddsRatio)"
+//		+ "}";
+//		
+//		
+//		res=sdQuery(manager, reasoner, query);
+//		System.out.println(res);
+		
+
+//		for(QueryBinding queryBinding:res){
+//			double oddsRatio=0;
+//			try{
+//				oddsRatio=Double.parseDouble(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "oddsRatio")).getValue());
+//			}
+//			catch(NumberFormatException e){
+//				oddsRatio=0;
+//			}
+//			
+//			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
+//			String orRefUri=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "orRef")).getValue();
+//			
+//			
+//			for(RiskFactorI riskFactor:riskFactors){
+//				
+//				
+//				if(riskFactor.getURI().compareTo(URI)==0){
+//					
+//					riskFactor.setOddsRatio(oddsRatio);
+//					
+//				}
+//				
+//			}
+//			
+//		}
+		
+		System.out.println("fermino");
+		
+		//determiniamo il type
+
+		query=prefissi+"select distinct ?rf ?type where{"
+		+ "Type(?rf,fa:RiskFactor)"
+		+ ",Type(?rf,?type)"
+		+ ",DirectSubClassOf(?type,fa:ScalarRiskFactor)"
+		+ "}"
+		+ "or where{"
+		+ "Type(?rf,fa:RiskFactor)"
+		+ ",Type(?rf,?type)"
+		+ ",DirectSubClassOf(?type,fa:TernaryRiskFactor)"
+		+ "}";
+
+		res=sdQuery(manager, reasoner, query);
+		
+		System.out.println(res);
+		
+		for(QueryBinding queryBinding : res){
+			
+			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "rf")).getValue();
+			String type=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "type")).getValue();
+			
+			for(RiskFactorI rf: riskFactors){
+				
+				if(rf.getURI().compareTo(URI)==0){
+					
+					rf.setType(parseRiskFactorType(type));
+					
+				}
+				
+			}
+			
+		}
+		
+		//abbiamo finito di definire se è ind/dir scalar/tern
+		
+		//qui controlliamo se qualcosa è synergic o meno
+		
+		for(RiskFactorI riskFactor:riskFactors){
+		
+			//dobbiamo discriminare i direct e gli indirect
+			
+			query=prefissi+"select ?toRFtype where{"
+					+ "Type(?trfsr,fa:ToRiskFactorSettingRef)"
+					+ ",PropertyValue(?trfsr,fa:isAboutSetting,fa:"+setting+")"
+					+ ",PropertyValue(?trfsr,fa:supportedByRef,fa:"+reference+")"
+					+ ",PropertyValue(?trfsr,fa:hasToRiskFactor,?toRF)"
+					+ ",PropertyValue(?toRF,fa:isAboutRiskFactor,<"+riskFactor.getURI()+">)"
+					+ ",Type(?toRF,?toRFtype)"
+					+ ",SubClassOf(?toRFtype,fa:AggregationOfInterpretations)"
+					+ "}";
+			System.out.println(query);
+			System.out.println(sdQuery(manager, reasoner, query));
 		
 		}//fine for
 		
@@ -380,7 +746,7 @@ public class MyReader implements OWLReader{
 					b.addScalarFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
 					break;
 					
-				case SINERGY:
+				case INDIRECT:
 					//non possiamo fare niente siccome in questa parte preliminare mancano molti RiskFactor e ci servono tutti nelle istanze per poterli aggiungere
 					//FIXME BISOGNA SISTEMARE LA COMORBIDITY!!!!!!!!
 
@@ -418,7 +784,7 @@ public class MyReader implements OWLReader{
 		
 		for(RiskFactorI riskFactor:riskFactors){
 			
-			if(riskFactor.getType()==RiskFactorType.SINERGY){
+			if(riskFactor.getType()==RiskFactorType.INDIRECT){
 				
 				final SynergyTypeBuilder comorbidityB = new SynergyTypeBuilder(riskFactor.getURI());
 				
@@ -453,7 +819,7 @@ public class MyReader implements OWLReader{
 		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
 			for(RiskFactorI riskFactor : lista){
 				
-				if(riskFactor.getType()==RiskFactorType.SINERGY){
+				if(riskFactor.getType()==RiskFactorType.INDIRECT){
 					Set<RiskFactorI> rf=riskFactor.getSinergyRiskFactors();
 					for(RiskFactorI rfa:rf) System.out.println(rfa);
 				}
@@ -666,6 +1032,9 @@ public class MyReader implements OWLReader{
 	 * @param query as the name says
 	 * @return the result or null
 	 */
+	
+	
+	
 	public QueryResult sdQuery(OWLOntologyManager manager,OWLReasoner reasoner,String query){
 		Query q=null;
 		
@@ -677,6 +1046,7 @@ public class MyReader implements OWLReader{
 		try {
 			q=Query.create(query);
 			res=qEn.execute(q);
+			if(res!=null)System.out.println("NUMERO RECORD:"+res.size());
 			return res;
 		} catch (QueryParserException e1) {
 			
@@ -700,16 +1070,16 @@ public RiskFactorType parseRiskFactorType (String type){
 		Map<String,RiskFactorType> mappaType;
 		mappaType=new HashMap<>();
 		
-		mappaType.put("http://www.unibo.it/fallrisk#ScalarRiskFactorType",RiskFactorType.SCALAR );
-		mappaType.put("http://www.unibo.it/fallrisk#TernaryFeatureType",RiskFactorType.TERNARY);
-		mappaType.put("http://www.unibo.it/fallrisk#SinergyRiskFactorType",RiskFactorType.SINERGY);
+		mappaType.put(ontologyURI+"#DirectScalarRiskFactor",RiskFactorType.DIRECT_SCALAR );
+		mappaType.put(ontologyURI+"#DirectTernaryRiskFactor",RiskFactorType.DIRECT_TERNARY);
+		mappaType.put(ontologyURI+"#IndirectScalarRiskFactor",RiskFactorType.INDIRECT_SCALAR );
+		mappaType.put(ontologyURI+"#IndirectTernaryRiskFactor",RiskFactorType.INDIRECT_TERNARY);
 		
 		if(mappaType.get(type)!=null){
 			return mappaType.get(type);
 		}
 		else{
-			return RiskFactorType.SCALAR;
-			//SE UNKNOWN BISOGNA CONTINUARE NELLA RICERCA
+			return RiskFactorType.UNKNOWN;
 		}
 	
 	}
@@ -821,6 +1191,60 @@ public RiskFactorType parseRiskFactorType (String type){
 		} catch (IOException e) {
 			
 			e.printStackTrace();
+		}
+	}
+	
+	
+	private OWLReasoner getReasonerHermit(OWLOntology ontology){
+		
+		OWLReasoner reasoner;
+		
+		if(reasonerHermitInstance==null){
+			Configuration conf=new Configuration();
+			
+			//questo server perché il datatype reversible non è supportato da OWL 2, per farlo funzionare ci vuole questa configurazione
+			conf.ignoreUnsupportedDatatypes=true;
+			conf.throwInconsistentOntologyException=false;
+			
+			reasoner=new Reasoner(conf, ontology);
+			reasonerHermitInstance=reasoner;
+			
+		}
+		
+		return reasonerHermitInstance;
+		
+	}
+	
+	private OWLReasoner getReasonerPellet(OWLOntology ontology){
+		
+		OWLReasoner reasoner;
+		
+		if(reasonerPelletInstance==null){
+		
+			reasoner=PelletReasonerFactory.getInstance().createReasoner(ontology);
+			reasonerPelletInstance=reasoner;
+		
+		}
+		
+		return reasonerPelletInstance;
+		
+	}
+	
+	public InequalityType parseInequalityType(String inequality){
+		Map<String,InequalityType> mappaInequality;
+		mappaInequality=new HashMap<>();
+		
+		mappaInequality.put("Equal",InequalityType.EQUAL);
+		mappaInequality.put("Less",InequalityType.LESS);
+		mappaInequality.put("LessOrEqual",InequalityType.LESS_OR_EQUAL);
+		mappaInequality.put("Greater",InequalityType.GREATER);
+		mappaInequality.put("GreaterOrEqual",InequalityType.GREATER_OR_EQUAL);
+		
+		if(mappaInequality.get(inequality)!=null){
+			return mappaInequality.get(inequality);
+		}
+		else{
+			return null;
 		}
 	}
 	
