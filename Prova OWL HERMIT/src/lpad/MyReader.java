@@ -161,7 +161,7 @@ public class MyReader implements OWLReader{
 		List<String> RiskFactorsURIs=new ArrayList<>();
 		Map<String,List<RiskFactorI>> RiskSettingORRiskFactors=new HashMap<>();
 		List<RiskFactorI> riskFactors=new ArrayList<>();
-		Map<String, EstimatorI> estimators=new HashMap<>();
+		
 		
 		@SuppressWarnings("unused")
 		String reference="Deandrea2010";
@@ -265,6 +265,8 @@ public class MyReader implements OWLReader{
 		
 		//prima i constantTernary
 		
+		System.out.println("--------------------------DETERMINAZIONE TERNARY CONSTANT---------------------------");
+		
 		query=prefissi+"select distinct ?riskfactor ?estimator ?question where{"
 				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
 				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
@@ -302,6 +304,8 @@ public class MyReader implements OWLReader{
 		//adesso gli scalar inequality
 		
 		//FIXME sistemare la question all'interno dell'ontologia
+		
+		System.out.println("--------------------------DETERMINAZIONE SCALAR INEQUALITY---------------------------");
 		
 		query=prefissi+"select distinct ?riskfactor ?estimator ?scalarValue ?inequality ?estimatorMin ?estimatorMax where{"
 				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
@@ -341,6 +345,36 @@ public class MyReader implements OWLReader{
 				scalarValue=-1;
 			}
 			
+			
+			//------------------------------AGGIUNTA DESCRIZIONE LIVELLI(ESTIMATOR)---------------------------------
+			
+			query=prefissi+"select ?desc ?lev where{"
+					+ "Type(?inst,fa:ScalarEstimatorValueDescription)"
+					+ ",PropertyValue(?inst,fa:isValueDescriptionOf,<"+estURI+">)"
+					+ ",PropertyValue(?inst,fa:ScalarEstimatorValue,?lev)"
+					+ ",PropertyValue(?inst,fa:BriefDescription,?desc)"
+					+ "}";
+			
+			QueryResult res2=sdQuery(manager, reasoner, query);
+			
+			Map<Integer,String> levelDescriptions=new HashMap<>();
+			
+			for(QueryBinding qb:res2){
+				int level;
+				String desc=qb.get(new QueryArgument(QueryArgumentType.VAR, "desc")).getValue();
+				try{
+					level=Integer.parseInt(qb.get(new QueryArgument(QueryArgumentType.VAR, "lev")).getValue());
+				}
+				catch(NumberFormatException e){
+					System.err.println("Impossible to parse int value of: "+estURI);
+					level=-1;
+				}
+				
+				levelDescriptions.put(level, desc);
+				
+			}
+			
+			//------------------------------------------------------------------------------------------------------
 
 //			String question=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "question")).getValue();
 			
@@ -349,6 +383,7 @@ public class MyReader implements OWLReader{
 				if(riskFactor.getURI().compareTo(rfURI)==0){
 					
 					EstimatorI estimator=new EstimatorImpl(estURI, EstimatorType.SCALAR_INEQUALITY,max,min,scalarValue,parseInequalityType(inequality));
+					estimator.setLevelDescriptions(levelDescriptions);
 					riskFactor.addEstimator(estimator);
 					
 				}
@@ -361,6 +396,7 @@ public class MyReader implements OWLReader{
 		
 		//adesso invece estraiamo gli scalar a livelli
 		
+		System.out.println("--------------------------DETERMINAZIONE SCALAR LEVELS---------------------------");
 		
 		query=prefissi+"select distinct ?riskfactor ?estimator ?estimatorLevels ?lastStep ?stepSize ?firstStep ?estimatorMin ?estimatorMax where{"
 				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
@@ -408,7 +444,7 @@ public class MyReader implements OWLReader{
 				firstStep=-1;
 			}
 			
-
+			System.out.println("--------------------------PREVALENZE LIVELLI RISK FACTOR---------------------------");
 			//otteniamo anche le prevalence dei livelli
 			Map<Integer,Double> levelPrevalence=new HashMap<>();
 			
@@ -469,8 +505,9 @@ public class MyReader implements OWLReader{
 		//abbiamo aggiunto inequality, scalar e ternary, ci mancano i sinergic
 		
 		
-		//--------------------------------------------QUI AGGIUNGIAMO GLI ESTIMATOR DI TIPO SINERGIC------------------------------------
+		//--------------------------------------------QUI AGGIUNGIAMO I RISKFACTOR NORMALI AL TIPO SINERGIC------------------------------------
 		
+		System.out.println("--------------------------AGGIUNTA RF DI TIPO SINERGIC---------------------------");
 		
 		query=prefissi+"select distinct ?riskfactor ?sinergicRF where{"
 				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
@@ -515,50 +552,13 @@ public class MyReader implements OWLReader{
 		}
 		
 		
+		//multipli estimator per riskfactor
+		
+		
 		//qui usiamo pellet
 		
 		reasoner=getReasonerPellet(ontology);
 		
-		//parte per la determinazione dell'oddsratio
-//		query=prefissi+"select ?orRef ?riskFactor ?oddsRatio where{"
-//		+ "Type(?orRef,fa:RiskSettingOddsRatioRef)"
-//		+ ",PropertyValue(?orRef,fa:isAboutSetting,fa:"+setting+")"
-//		+ ",PropertyValue(?orRef,fa:supportedByRef,fa:"+reference+")"
-//		+ ",PropertyValue(?orRef,fa:isAboutRisk,fa:"+risk+")"
-//		+ ",PropertyValue(?orRef,fa:isAboutRiskFactor,?riskFactor)"
-//		+ ",PropertyValue(?orRef,fa:OddsRatio,?oddsRatio)"
-//		+ "}";
-//		
-//		
-//		res=sdQuery(manager, reasoner, query);
-//		System.out.println(res);
-		
-
-//		for(QueryBinding queryBinding:res){
-//			double oddsRatio=0;
-//			try{
-//				oddsRatio=Double.parseDouble(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "oddsRatio")).getValue());
-//			}
-//			catch(NumberFormatException e){
-//				oddsRatio=0;
-//			}
-//			
-//			String URI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskFactor")).getValue();
-//			String orRefUri=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "orRef")).getValue();
-//			
-//			
-//			for(RiskFactorI riskFactor:riskFactors){
-//				
-//				
-//				if(riskFactor.getURI().compareTo(URI)==0){
-//					
-//					riskFactor.setOddsRatio(oddsRatio);
-//					
-//				}
-//				
-//			}
-//			
-//		}
 		
 		System.out.println("fermino");
 		
@@ -586,7 +586,7 @@ public class MyReader implements OWLReader{
 			
 			for(RiskFactorI rf: riskFactors){
 				
-				if(rf.getURI().compareTo(URI)==0){
+				if(rf.getURI().compareTo(URI)==0 && rf.getType()==null){
 					
 					rf.setType(parseRiskFactorType(type));
 					
@@ -596,25 +596,53 @@ public class MyReader implements OWLReader{
 			
 		}
 		
-		//abbiamo finito di definire se è ind/dir scalar/tern
 		
-		//qui controlliamo se qualcosa è synergic o meno
-		
+		/*
+		 * 
+		 * AGGIUNGIAMO QUESTION A TUTTI GLI ESTIMATOR CHE CE L'HANNO
+		 * 
+		 */
+				
 		for(RiskFactorI riskFactor:riskFactors){
-		
-			//dobbiamo discriminare i direct e gli indirect
 			
-			query=prefissi+"select ?toRFtype where{"
-					+ "Type(?trfsr,fa:ToRiskFactorSettingRef)"
-					+ ",PropertyValue(?trfsr,fa:isAboutSetting,fa:"+setting+")"
-					+ ",PropertyValue(?trfsr,fa:supportedByRef,fa:"+reference+")"
-					+ ",PropertyValue(?trfsr,fa:hasToRiskFactor,?toRF)"
-					+ ",PropertyValue(?toRF,fa:isAboutRiskFactor,<"+riskFactor.getURI()+">)"
-					+ ",Type(?toRF,?toRFtype)"
-					+ ",SubClassOf(?toRFtype,fa:AggregationOfInterpretations)"
-					+ "}";
-			System.out.println(query);
-			System.out.println(sdQuery(manager, reasoner, query));
+			Set<EstimatorI> estimators;		
+			estimators=riskFactor.getEstimators();
+			
+			for(EstimatorI estimator:estimators){
+				
+				query=prefissi+"select ?question where{"
+						+ "PropertyValue(<"+estimator.getURI()+">,fa:Question,?question)"
+						+ "}";
+				
+				res=sdQuery(manager, reasoner, query);
+				
+				for(QueryBinding queryBinding:res){
+					
+					String question=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "question")).getValue();
+					estimator.setQuestion(question);
+				
+				}
+				
+				
+			}
+			
+		}//fine for
+		
+		
+		/*
+		 * 
+		 * STAMPA DEI RISKFACTOR E DI QUELLO DA CUI SONO POPOLATI
+		 * 
+		 */
+		
+		
+		//abbiamo finito di definire se è ind/dir scalar/tern
+				
+		for(RiskFactorI riskFactor:riskFactors){
+			
+			
+			System.out.println(riskFactor);
+		
 		
 		}//fine for
 		
@@ -639,25 +667,22 @@ public class MyReader implements OWLReader{
 			
 			for(RiskFactorI riskFactor : riskFactors){
 				
-				boolean isReversible;
-				
-				if(riskFactor.getReversibility()!=Reversibility.IRREVERSIBLE) isReversible=true;
-				else isReversible=false;
+				boolean isReversible=true;
 				
 				
 				switch (riskFactor.getType()) {
 				
 				case TERNARY:
+					
+				case DIRECT_TERNARY:
 					fsb.addTernaryType(riskFactor.getURI(), isReversible);
 					break;
-
 				case SCALAR:
 					
-//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
-					
+				case DIRECT_SCALAR:
+		
 					query=prefissi+"select ?maxLevel where{"
-							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:hasRiskFactorType,?riskFactorType)"
-							+ ",PropertyValue(?riskFactorType,fa:RiskFactorMaxLevel,?maxLevel)"
+							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:RiskFactorMaxLevel,?maxLevel)"
 							+ "}";
 					res=sdQuery(manager, reasoner, query);
 					
@@ -680,12 +705,9 @@ public class MyReader implements OWLReader{
 //					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
 //					
 //					query=prefissi+"select ?maxLevel where{"
-//							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:hasRiskFactorType,?riskFactorType)"
-//							+ ",PropertyValue(?riskFactorType,fa:RiskFactorMaxLevel,?maxLevel)"
+//							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:RiskFactorMaxLevel,?maxLevel)"
 //							+ "}";
 //					res=sdQuery(manager, reasoner, query);
-//					
-//					
 //					
 //					try{
 //						maxLevel=Integer.parseInt(res.get(0).get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue());
@@ -737,19 +759,14 @@ public class MyReader implements OWLReader{
 			for (RiskFactorI riskFactor : riskFactors){
 					
 				switch (riskFactor.getType()) {
+				case DIRECT_TERNARY:
 				case TERNARY:
 					b.setTernaryRiskFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
 					break;
-
+				case DIRECT_SCALAR:
 				case SCALAR:
 					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
 					b.addScalarFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
-					break;
-					
-				case INDIRECT:
-					//non possiamo fare niente siccome in questa parte preliminare mancano molti RiskFactor e ci servono tutti nelle istanze per poterli aggiungere
-					//FIXME BISOGNA SISTEMARE LA COMORBIDITY!!!!!!!!
-
 					break;
 				default:
 					break;
@@ -780,11 +797,9 @@ public class MyReader implements OWLReader{
 		}
 		
 		
-		
-		
 		for(RiskFactorI riskFactor:riskFactors){
 			
-			if(riskFactor.getType()==RiskFactorType.INDIRECT){
+			if(riskFactor.getType()==RiskFactorType.SINERGY){
 				
 				final SynergyTypeBuilder comorbidityB = new SynergyTypeBuilder(riskFactor.getURI());
 				
@@ -812,49 +827,6 @@ public class MyReader implements OWLReader{
 		 * 
 		 */
 		
-		
-		/*
-		 * STAMPA TUTTI I RISKFACTOR COLLEGATI AD UN SINERGY----------------------------------------------------------------------------------------------------
-		 */
-		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
-			for(RiskFactorI riskFactor : lista){
-				
-				if(riskFactor.getType()==RiskFactorType.INDIRECT){
-					Set<RiskFactorI> rf=riskFactor.getSinergyRiskFactors();
-					for(RiskFactorI rfa:rf) System.out.println(rfa);
-				}
-			}
-		}
-		
-		/*
-		 * Stampa estimator collegati
-		 */
-		
-		for (List<RiskFactorI> lista : RiskSettingORRiskFactors.values()){
-			for(RiskFactorI riskFactor : lista){
-				System.out.println(riskFactor);
-				for(EstimatorI estimator:riskFactor.getEstimators()){
-					System.out.println("-<<--"+estimator);
-				}
-			}
-		}
-		
-		
-		
-		
-		System.out.println("-------------------------------------STAMPA RISKSETTINGORREF E RISKFACTOR A LORO COLLEGATI--------------------------------");
-		
-		
-		for (String string : RiskSettingORRef.keySet()) {
-			System.out.println(string);
-			for(RiskFactorI riskFactor:RiskSettingORRiskFactors.get(string)){
-				System.out.println("---"+riskFactor);
-			}
-		}
-		
-		/*
-		 * FINE STAMPA DI CONTROLLO--------------------------------------------------------------------------------------------------------------------------------
-		 */
 	
         
 		RiskFactorsData output=null;
@@ -876,16 +848,7 @@ public class MyReader implements OWLReader{
 	}//fine read
 	
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
 	/**
 	 * This function prints the instances that the query on the ontology retrieves.
 	 * 
