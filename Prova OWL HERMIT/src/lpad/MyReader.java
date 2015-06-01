@@ -1,6 +1,8 @@
 package lpad;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -11,10 +13,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-
 import lpad.features.Factor;
 import lpad.features.FactorSpaceBuilder;
 import lpad.synergy.SynergyOR;
@@ -22,12 +20,9 @@ import lpad.synergy.SynergyTypeBuilder;
 
 import org.semanticweb.HermiT.Configuration;
 import org.semanticweb.HermiT.Reasoner;
-import org.semanticweb.HermiT.Reasoner.ReasonerFactory;
-import org.semanticweb.HermiT.examples.Explanations;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.io.OWLOntologyDocumentSource;
 import org.semanticweb.owlapi.io.ReaderDocumentSource;
-import org.semanticweb.owlapi.model.OWLAxiom;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLDataProperty;
@@ -38,24 +33,18 @@ import org.semanticweb.owlapi.model.OWLNamedIndividual;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
-import org.semanticweb.owlapi.reasoner.InconsistentOntologyException;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.util.SimpleShortFormProvider;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
-
-import com.clarkparsia.owlapi.explanation.BlackBoxExplanation;
-import com.clarkparsia.owlapi.explanation.HSTExplanationGenerator;
-import com.clarkparsia.pellet.owlapiv3.PelletReasonerFactory;
 
 import sample.feature.FeatureSpace;
-import stat.odds.OddsRatio;
 import stat.odds.OddsRatioImpl;
 import util.stringFunction.NoWhiteLowerCase;
+
+import com.clarkparsia.pellet.owlapiv3.PelletReasonerFactory;
+
 import de.derivo.sparqldlapi.Query;
 import de.derivo.sparqldlapi.QueryArgument;
 import de.derivo.sparqldlapi.QueryBinding;
@@ -76,11 +65,66 @@ public class MyReader implements OWLReader{
 	/**
 	 * Returns null when there's some kind of error
 	 */
+	
+	String reference="Deandrea2010";
+	String setting="Community";
+	String risk="FallIn1Year";
+	String query=null;
 	private String ontologyURI="http://ai.unibo.it/on2risk";
 	private String prefissi="PREFIX fa: <"+ontologyURI+"#> PREFIX rdf: <http://www.w3.org/2000/01/rdf-schema#> ";
 	OWLReasoner reasonerHermitInstance,reasonerPelletInstance;
 	
+	
+	public MyReader(String reference, String setting, String risk){
+		
+		this();
+		this.reference=reference;
+		this.risk=risk;
+		this.setting=setting;
+		
+	}
+	
+	public MyReader() {
+		
+	}
+
 	public RiskFactorsData read(Reader reader) {
+		
+		//ESTRAIAMO TUTTI GLI ESTIMATOR.
+		
+		List<RiskFactorI> riskFactors;
+		
+		riskFactors=getRiskFactors(reader);
+		
+		List<EstimatorI> estimators=new ArrayList<EstimatorI>();
+		
+		for(RiskFactorI riskFactor:riskFactors){
+			
+			for(EstimatorI estimator:riskFactor.getEstimators()){
+				
+				estimators.add(estimator);
+				
+			}
+			
+		}
+		
+		
+		createHtmlTableEstimators(estimators);
+		
+		
+		
+        return fromRFToRiskFactorsData(riskFactors);
+	}//fine read
+	
+	
+	/**
+	 * 
+	 * This function extract a list of RiskFactorI from an ontology
+	 * 
+	 * @param reader
+	 * @return
+	 */
+	public List<RiskFactorI> getRiskFactors(Reader reader){
 		
 		OWLOntology ontology=null;
 //		Set<OWLClass> classes=null;
@@ -144,51 +188,15 @@ public class MyReader implements OWLReader{
 		//parte in cui controlliamo i dati veri e propri
 		//usiamo RiskFactorDataBuilder
 		
-		RiskFactorsDataBuilder b=new RiskFactorsDataBuilder();
+		
         
-		
-		//per prima cosa tiriamo fuori quali sono gli oddsratio in relazione al reference
-		
-		/*
-		 * 			for (QueryArgument arg : queryBinding.getBoundArgs()) {
-						System.out.println(arg.getValue()+arg.getType());
-					}
-		 * 
-		 */
-		
-		//contiene gli URI e i rispettivi OddsRatio collegati
-		Map<String,Double> RiskSettingORRef=new HashMap<>();
-		List<String> RiskFactorsURIs=new ArrayList<>();
-		Map<String,List<RiskFactorI>> RiskSettingORRiskFactors=new HashMap<>();
 		List<RiskFactorI> riskFactors=new ArrayList<>();
 		
-		
-		@SuppressWarnings("unused")
-		String reference="Deandrea2010";
-		String setting="Community";
-		String risk="FallIn1Year";
-		String query=null;
 
 		//per questa usiamo hermit che mi sembra più veloce
 		
 		reasoner=getReasonerPellet(ontology);
-		
-//		query=prefissi+"select distinct ?torfsr ?riskfactor where{"
-//				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
-//				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
-//				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
-//				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?torf)"
-//				+ ",PropertyValue(?torf,fa:isAboutRiskFactor,?riskfactor)"
-////				+ ",PropertyValue(?riskfactor,fa:hasFeatureType,?featureType)"
-////				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
-//				+ "}";
-		
-		//possiamo anche ottenere i rf semplicemente basandoci sull'odds ratio e poi partire di lì.
-
-		
-		
-		
-		
+				
 		query=prefissi+"select distinct ?riskfactor ?oddsRatio where{"
 				+ "Type(?torfsr,fa:RiskSettingOddsRatioRef)"
 				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
@@ -200,11 +208,10 @@ public class MyReader implements OWLReader{
 //				+ ",PropertyValue(?riskfactor,fa:hasReversibility,?reversibility)"//da qui in giù parte per la determinazione dell'or
 				+ "}";
 		
-		//FIXME dobbiamo sistemare la reversibility all'interno del nostro programma
 		
 		res=sdQuery(manager, reasoner, query);
 		
-		//FIXME bisogna aggiungere anche le prevalence
+		//TODO bisogna aggiungere anche le prevalence
 		
 		System.out.println(res);
 		
@@ -229,6 +236,37 @@ public class MyReader implements OWLReader{
 			
 			riskFactors.add(rf);
 			System.out.println("aggiunto:"+rf);
+		}
+		
+		//aggiungiamo tutte le prevalence ai riskFactor
+		
+		for(RiskFactorI riskfactor:riskFactors){
+			
+			query=prefissi+"select ?prevalence where{"
+					+ "Type(?insP,fa:RiskSettingPrevalenceRef)"
+					+ ",PropertyValue(?insP,fa:isAboutSetting,fa:"+setting+")"
+					+ ",PropertyValue(?insP,fa:isAboutRiskFactor,<"+riskfactor.getURI()+">)"
+					+ ",PropertyValue(?insP,fa:Probability,?prevalence)"
+					+ "}";
+			
+			res=sdQuery(manager, reasoner, query);
+			
+			for (QueryBinding queryBinding : res) {
+				
+				double prevalence=0;
+				
+				try{
+					prevalence=Double.parseDouble(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "prevalence")).getValue());
+				}
+				catch(NumberFormatException e){
+					prevalence=0;
+				}
+				
+				riskfactor.setPrevalence(prevalence);
+			
+			}
+			
+			
 		}
 		
 		//QUI ESTRAIAMO TUTTI GLI ESTIMATOR E LI COLLEGHIAMO AI RISKFACTOR
@@ -425,7 +463,6 @@ public class MyReader implements OWLReader{
 
 			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
 			String estURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimator")).getValue();
-			String estDiscreteLevelsURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorLevels")).getValue();
 			
 			try{
 				max=Integer.parseInt(queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "estimatorMax")).getValue());
@@ -647,12 +684,114 @@ public class MyReader implements OWLReader{
 		}//fine for
 		
 	
-		//fino a qui sembra funzionare ma molto lento
-		System.out.println("fermino");
+		
+		for(RiskFactorI riskFactor : riskFactors){
+			
+			
+			if(riskFactor.getType()==RiskFactorType.DIRECT_SCALAR){
+				
+				
+				query=prefissi+"select ?maxLevel where{"
+						+ "PropertyValue(<"+riskFactor.getURI()+">,fa:RiskFactorMaxLevel,?maxLevel)"
+						+ "}";
+				res=sdQuery(manager, reasoner, query);
+				
+				int maxLevel;
+				
+				try{
+					maxLevel=Integer.parseInt(res.get(0).get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue());
+				}
+				catch(NumberFormatException e){
+					maxLevel=0;
+				}
+				
+				riskFactor.setMax(maxLevel);
+				
+				
+			}
+			
+			
+		}
 		
 		
 		
-		//conviene creare prima un mondo di istanze
+		
+		/*
+		 * 
+		 * prima di aggiungere a Deandrea, puliamo l'URI
+		 * RENDIAMO L'URI CON LA PRIMA LETTERA MINUSCOLA E SENZA L'INDIRIZZO DAVANTI
+		 * 
+		 * 
+		 */
+		
+		
+		for(RiskFactorI riskFactor: riskFactors){
+			
+			String provv;
+			provv=riskFactor.getURI().replaceAll(".+#", "");
+			provv=provv.replaceFirst("^.", provv.substring(0, 1).toLowerCase());
+			System.out.println(provv);
+			riskFactor.setURI(provv);
+			
+			for(EstimatorI estimator:riskFactor.getEstimators()){
+				provv=estimator.getURI().replaceAll(".+#", "");
+				provv=provv.replaceFirst("^.", provv.substring(0, 1).toLowerCase());
+				System.out.println(provv);
+				estimator.setURI(provv);
+			}
+			
+		}
+		
+		return riskFactors;
+		
+	}
+	
+	
+	/**
+	 * 
+	 * This function extract a list of EstimatorI from an ontology
+	 * 
+	 * @param reader
+	 * @return
+	 */
+	public List<EstimatorI> getEstimators(Reader reader){
+		
+		List<RiskFactorI> riskFactors;
+		
+		riskFactors=getRiskFactors(reader);
+		
+		List<EstimatorI> estimators=new ArrayList<EstimatorI>();
+		
+		for(RiskFactorI riskFactor:riskFactors){
+			
+			for(EstimatorI estimator:riskFactor.getEstimators()){
+				
+				estimators.add(estimator);
+				
+			}
+			
+		}
+		
+		return estimators;
+		
+	}
+	
+	/**
+	 * 
+	 * This function creates a RiskFactorsData class from a list of RiskFactorI
+	 *(used in the function Read)
+	 * 
+	 * @param riskFactors
+	 * @return RiskFactorsData class
+	 * @author Flavio Zuffa
+	 */
+	public RiskFactorsData fromRFToRiskFactorsData(List<RiskFactorI> riskFactors){
+		
+		
+	//conviene creare prima un mondo di istanze
+		
+		RiskFactorsDataBuilder b=new RiskFactorsDataBuilder();
+		
 		
 		FactorSpaceBuilder fsb=new FactorSpaceBuilder(new NoWhiteLowerCase());
 		@SuppressWarnings("rawtypes")
@@ -681,24 +820,10 @@ public class MyReader implements OWLReader{
 					
 				case DIRECT_SCALAR:
 		
-					query=prefissi+"select ?maxLevel where{"
-							+ "PropertyValue(<"+riskFactor.getURI()+">,fa:RiskFactorMaxLevel,?maxLevel)"
-							+ "}";
-					res=sdQuery(manager, reasoner, query);
-					
-					int maxLevel;
-					
-					try{
-						maxLevel=Integer.parseInt(res.get(0).get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue());
-					}
-					catch(NumberFormatException e){
-						maxLevel=0;
-					}
 					
 					//qui dobbiamo anche controllare se è synergic o meno
 					
-					
-					fsb.addScalarType(riskFactor.getURI(), maxLevel, isReversible);
+					fsb.addScalarType(riskFactor.getURI(), riskFactor.getMax(), isReversible);
 					
 					break;
 //				case SINERGY:
@@ -765,7 +890,6 @@ public class MyReader implements OWLReader{
 					break;
 				case DIRECT_SCALAR:
 				case SCALAR:
-					//FIXME da vedere come implementare il massimo e il minimo, non sono chiaramente indicati nell'ontologia
 					b.addScalarFactor(featureSpace.getType(riskFactor.getURI()), riskFactor.getOddsRatio(), true);
 					break;
 				default:
@@ -844,8 +968,91 @@ public class MyReader implements OWLReader{
 		}
 		
 		
-        return output;
-	}//fine read
+		return output;
+		
+		
+	}//fine funzione
+	
+	/**
+	 * This function creates an html table that contains radio button for ternary estimators and an input text for Scalar estimators.
+	 * @param estimators
+	 * @return
+	 * @author Flavio Zuffa
+	 */
+	public String createHtmlTableEstimators(List<EstimatorI> estimators){
+		StringBuilder builder=new StringBuilder();
+		StringBuilder buildSc=new StringBuilder();
+		StringBuilder buildT=new StringBuilder();
+		String tabEstimators;
+		
+		
+		
+		for(EstimatorI estimator:estimators){
+			
+			if(estimator.getType()==EstimatorType.SCALAR_INEQUALITY || estimator.getType()==EstimatorType.SCALAR_LEVELS){
+				
+				buildSc.append("<tr>");
+				buildSc.append("<td width=\"40%\">");
+				buildSc.append("<span id=\""+estimator.getURI()+"\">");
+				buildSc.append(estimator.getQuestion());
+				buildSc.append("</span></td>");
+				buildSc.append("<td><div class=\"row\"");
+				buildSc.append("::before");
+				buildSc.append("<div class=\"form-group scalarEstimatorInputGroup\">");
+				buildSc.append("<div class=\"col-xs-4\">");
+				buildSc.append("<input class=\"input-mini inputParam form-control scalarEstimatorInputText\" id=\""+estimator.getURI()+"text\" name=\""+estimator.getURI()+"\" type=\"text\" prolog=\""+estimator.getURI()+"\" minallowedvalue=\""+estimator.getMin()+"\" maxallowedvalue=\""+estimator.getMax()+"\" disabled>");
+				buildSc.append("</div>");
+				buildSc.append("<div class=\"col-xs-8\">");
+				buildSc.append("<label class=\"checkbox-inline\"><input type=\"checkbox\" class=\"inputParam\" id=\""+estimator.getURI()+"\"  name=\""+estimator.getURI()+"\" prolog=\""+estimator.getURI()+"\" value=\"u\" checked");
+				buildSc.append("\"Use prevalence\"</label></div></div> ::after </div></td></tr>");
+			}
+			else if(estimator.getType()==EstimatorType.TERNARY){
+				
+				buildT.append("<tr>");
+				buildT.append("<td width=\"40%\">");
+				buildT.append("<span id=\""+estimator.getURI()+"\">");
+				buildT.append(estimator.getQuestion());
+				buildT.append("</span></td>");
+				buildT.append("<td><div class=\"radio-inline\"");
+				buildT.append("<label class=\"radio-inline\"> <input type=\"radio\" class=\"inputParam\" prolog=\""+estimator.getURI()+"\" name=\""+estimator.getURI()+"\" value=\"t\">Yes</label>");
+				buildT.append("<label class=\"radio-inline\"> <input type=\"radio\" class=\"inputParam\" prolog=\""+estimator.getURI()+"\" name=\""+estimator.getURI()+"\" value=\"f\">No</label>");
+				buildT.append("<label class=\"radio-inline\"> <input type=\"radio\" class=\"inputParam\" prolog=\""+estimator.getURI()+"\" name=\""+estimator.getURI()+"\" value=\"u\" checked>Use prevalence</label>");
+				buildT.append("</div></td></tr>");
+				
+			}
+			
+		}
+		
+		
+		tabEstimators="<table><tbody>"+buildSc.toString()+buildT.toString()+"</tbody></table>";
+		
+		tabEstimators=tabEstimators.replaceAll(">", ">\n");
+		
+		/*
+		 * 
+		 */
+		
+		File f;
+		
+		f=new File("C:\\Users\\Flavio\\Desktop\\ris.html");
+		
+		try {
+			FileWriter fw=new FileWriter(f);
+			fw.write(tabEstimators);
+			fw.close();
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		
+		
+//		System.out.println(tabEstimators);
+		
+		return tabEstimators;
+		
+	}
 	
 	
 
@@ -1047,58 +1254,24 @@ public RiskFactorType parseRiskFactorType (String type){
 	
 	}
 
-//public RiskFactorType findUnknownRiskFactorType (String type,OWLOntologyManager manager,OWLReasoner reasoner){
-//	
-//	Map<String,RiskFactorType> mappaType;
-//	mappaType=new HashMap<>();
-//	
-//	mappaType.put("http://www.unibo.it/fallrisk#ScalarRiskFactorType",RiskFactorType.SCALAR );
-//	mappaType.put("http://www.unibo.it/fallrisk#TernaryFeatureType",RiskFactorType.TERNARY);
-//	mappaType.put("http://www.unibo.it/fallrisk#SinergyRiskFactorType",RiskFactorType.SINERGY);
-//	
-//	QueryResult res;
-//	
-//	String query=prefissi+" select ?tipo where{"
-//			+ "Type(<"+"type"+">,?tipo"
-//			+ ",DirectSubClassOf(?tipo,fa:RiskFactorType)"
-//			+ "}";
-//	
-//	res=sdQuery(manager, reasoner, query);
-//	
-//	for(QueryBinding queryBinding:res){
-//		String tipo;
-//		tipo=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "maxLevel")).getValue();
+	
+//	/**
+//	 * Returns the EstimatorType given an URI that points to the EstimatorType
+//	 * @param type
+//	 * @return the EstimatorType or null if not found
+//	 */
+//	public EstimatorType parseEstimatorType (String type){
 //		
-//		if(tipo.compareTo("http://www.unibo.it/fallrisk#ScalarRiskFactorType")==0){
-//			return RiskFactorType.SCALAR;
-//		}
-//		else if(tipo.compareTo("http://www.unibo.it/fallrisk#SinergyRiskFactorType")==0)
+//		Map<String,EstimatorType> mappaType;
+//		mappaType=new HashMap<>();
+//		
+//		mappaType.put(ontologyURI+"#ScalarEstimator",EstimatorType.SCALAR );
+//		mappaType.put(ontologyURI+"#TernaryEstimator",EstimatorType.TERNARY);
+//		
+//		return mappaType.get(type);
 //		
 //		
 //	}
-//	
-//	return RiskFactorType.UNKNOWN;
-//
-//}
-	
-	
-	/**
-	 * Returns the EstimatorType given an URI that points to the EstimatorType
-	 * @param type
-	 * @return the EstimatorType or null if not found
-	 */
-	public EstimatorType parseEstimatorType (String type){
-		
-		Map<String,EstimatorType> mappaType;
-		mappaType=new HashMap<>();
-		
-		mappaType.put("http://www.unibo.it/fallrisk#ScalarEstimator",EstimatorType.SCALAR );
-		mappaType.put("http://www.unibo.it/fallrisk#TernaryEstimator",EstimatorType.TERNARY);
-		
-		return mappaType.get(type);
-		
-		
-	}
 	
 	
 	
@@ -1106,39 +1279,40 @@ public RiskFactorType parseRiskFactorType (String type){
 	 * Returns the Reversibility given an URI that points to it
 	 * @param reversibility
 	 * @return the Reversibility or null if not found
+	 * @deprecated
 	 */
 	public Reversibility parseReversibility (String reversibility){
 		
 		Map<String,Reversibility> mappaType;
 		mappaType=new HashMap<>();
 		
-		mappaType.put("http://www.unibo.it/fallrisk#Irreversible", Reversibility.IRREVERSIBLE);
-		mappaType.put("http://www.unibo.it/fallrisk#SurelyReversible",Reversibility.REVERSIBLE);
-		mappaType.put("http://www.unibo.it/fallrisk#SubjectSpecificReversible",Reversibility.SUBJECT_SPECIFIC);
+		mappaType.put(ontologyURI+"#Irreversible", Reversibility.IRREVERSIBLE);
+		mappaType.put(ontologyURI+"#SurelyReversible",Reversibility.REVERSIBLE);
+		mappaType.put(ontologyURI+"#SubjectSpecificReversible",Reversibility.SUBJECT_SPECIFIC);
 		
 		return mappaType.get(reversibility);
 		
 		
 	}
 	
-	/**
-	 * Returns the EstimatorToFactorType given an URI that points to the EstimatorToFactorType
-	 * @param type
-	 * @return the EstimatorToFactorType or null if not found
-	 */
-	public EstimatorToFactorType parseEstimatorToFactorType (String type){
-		
-		Map<String,EstimatorToFactorType> mappaType;
-		mappaType=new HashMap<>();
-		
-		mappaType.put("http://www.unibo.it/fallrisk#ConstantEstimatorToFactor", EstimatorToFactorType.CONSTANT);
-		mappaType.put("http://www.unibo.it/fallrisk#DiscreteLevelsEstimatorToFactor",EstimatorToFactorType.DISCRETE_LEVELS);
-		mappaType.put("http://www.unibo.it/fallrisk#InequalityOREstimatorsToFactor",EstimatorToFactorType.INEQUALITY);
-		
-		return mappaType.get(type);
-		
-		
-	}
+//	/**
+//	 * Returns the EstimatorToFactorType given an URI that points to the EstimatorToFactorType
+//	 * @param type
+//	 * @return the EstimatorToFactorType or null if not found
+//	 */
+//	public EstimatorToFactorType parseEstimatorToFactorType (String type){
+//		
+//		Map<String,EstimatorToFactorType> mappaType;
+//		mappaType=new HashMap<>();
+//		
+//		mappaType.put(ontologyURI+"#ConstantEstimatorToFactor", EstimatorToFactorType.CONSTANT);
+//		mappaType.put(ontologyURI+"#DiscreteLevelsEstimatorToFactor",EstimatorToFactorType.DISCRETE_LEVELS);
+//		mappaType.put(ontologyURI+"#InequalityOREstimatorsToFactor",EstimatorToFactorType.INEQUALITY);
+//		
+//		return mappaType.get(type);
+//		
+//		
+//	}
 	
 	public void provaQuery(OWLOntologyManager manager, OWLReasoner reasoner){
 		String query=null;
@@ -1158,6 +1332,7 @@ public RiskFactorType parseRiskFactorType (String type){
 	}
 	
 	
+	@SuppressWarnings("unused")
 	private OWLReasoner getReasonerHermit(OWLOntology ontology){
 		
 		OWLReasoner reasoner;
