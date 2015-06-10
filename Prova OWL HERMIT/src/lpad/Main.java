@@ -12,7 +12,7 @@ public class Main {
 //		String fileName="e:\\DATI\\COSE\\Uni\\java workspace\\OWLParser\\bin\\fallRisk.owl";
 //		String fileName="e:\\DATI\\COSE\\Uni\\Tesi\\fallRisk.owl";
 //		String fileName="e:\\DATI\\COSE\\Uni\\Tesi\\fallRisk10 0.8.owl";
-		String fileName="e:\\DATI\\COSE\\Uni\\Tesi\\in uso\\fallRisk10 0.93.owl";
+		String fileName="E:\\DATI\\Condivisione DropBox\\Dropbox\\Flavio Zuffa\\fallRisk10 0.95.owl";
 		
 		OWLReader reader;
 		

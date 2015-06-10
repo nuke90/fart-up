@@ -18,8 +18,8 @@ import lpad.features.FactorSpaceBuilder;
 import lpad.synergy.SynergyOR;
 import lpad.synergy.SynergyTypeBuilder;
 
-import org.semanticweb.HermiT.Configuration;
-import org.semanticweb.HermiT.Reasoner;
+//import org.semanticweb.HermiT.Configuration;
+//import org.semanticweb.HermiT.Reasoner;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.io.OWLOntologyDocumentSource;
 import org.semanticweb.owlapi.io.ReaderDocumentSource;
@@ -539,21 +539,21 @@ public class MyReader implements OWLReader{
 		}
 		
 		
-		//abbiamo aggiunto inequality, scalar e ternary, ci mancano i sinergic
+		//abbiamo aggiunto inequality, scalar e ternary, ci mancano i Synergic
 		
 		
-		//--------------------------------------------QUI AGGIUNGIAMO I RISKFACTOR NORMALI AL TIPO SINERGIC------------------------------------
+		//--------------------------------------------QUI AGGIUNGIAMO I RISKFACTOR NORMALI AL TIPO Synergic------------------------------------
 		
-		System.out.println("--------------------------AGGIUNTA RF DI TIPO SINERGIC---------------------------");
+		System.out.println("--------------------------AGGIUNTA RF DI TIPO Synergic---------------------------");
 		
-		query=prefissi+"select distinct ?riskfactor ?sinergicRF where{"
+		query=prefissi+"select distinct ?riskfactor ?SynergicRF where{"
 				+ "Type(?torfsr,fa:ToRiskFactorSettingRef)"
 				+ ",PropertyValue(?torfsr,fa:isAboutSetting,fa:"+setting+")"
 				+ ",PropertyValue(?torfsr,fa:supportedByRef,fa:"+reference+")"
 				+ ",PropertyValue(?torfsr,fa:hasToRiskFactor,?estToF)"
 				+ ",PropertyValue(?estToF,fa:isAboutRiskFactor,?riskfactor)"
-				+ ",Type(?estToF,fa:SinergicFactorsToFactor)"
-				+ ",PropertyValue(?estToF,fa:hasSinergicRiskFactor,?sinergicRF)"
+				+ ",Type(?estToF,fa:SynergicFactorsToFactor)"
+				+ ",PropertyValue(?estToF,fa:hasSynergicRiskFactor,?SynergicRF)"
 				+ "}";
 		
 		
@@ -564,19 +564,19 @@ public class MyReader implements OWLReader{
 		for(QueryBinding queryBinding:res){
 			
 			String rfURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "riskfactor")).getValue();
-			String sinergicRFURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "sinergicRF")).getValue();
+			String SynergicRFURI=queryBinding.get(new QueryArgument(QueryArgumentType.VAR, "SynergicRF")).getValue();
 			
 			for(RiskFactorI riskFactor:riskFactors){
 				
 				if(riskFactor.getURI().compareTo(rfURI)==0){
 					
-					riskFactor.setType(RiskFactorType.SINERGY);
+					riskFactor.setType(RiskFactorType.SYNERGY);
 					
 					for(RiskFactorI riskFactorSin:riskFactors){
 						
-						if(riskFactorSin.getURI().compareTo(sinergicRFURI)==0){
+						if(riskFactorSin.getURI().compareTo(SynergicRFURI)==0){
 							
-							riskFactor.addSinergyRiskFactor(riskFactorSin);
+							riskFactor.addSynergyRiskFactor(riskFactorSin);
 							
 						}
 						
@@ -923,7 +923,7 @@ public class MyReader implements OWLReader{
 		
 		for(RiskFactorI riskFactor:riskFactors){
 			
-			if(riskFactor.getType()==RiskFactorType.SINERGY){
+			if(riskFactor.getType()==RiskFactorType.SYNERGY){
 				
 				final SynergyTypeBuilder comorbidityB = new SynergyTypeBuilder(riskFactor.getURI());
 				
@@ -1333,25 +1333,25 @@ public RiskFactorType parseRiskFactorType (String type){
 	
 	
 	@SuppressWarnings("unused")
-	private OWLReasoner getReasonerHermit(OWLOntology ontology){
-		
-		OWLReasoner reasoner;
-		
-		if(reasonerHermitInstance==null){
-			Configuration conf=new Configuration();
-			
-			//questo server perché il datatype reversible non è supportato da OWL 2, per farlo funzionare ci vuole questa configurazione
-			conf.ignoreUnsupportedDatatypes=true;
-			conf.throwInconsistentOntologyException=false;
-			
-			reasoner=new Reasoner(conf, ontology);
-			reasonerHermitInstance=reasoner;
-			
-		}
-		
-		return reasonerHermitInstance;
-		
-	}
+//	private OWLReasoner getReasonerHermit(OWLOntology ontology){
+//		
+//		OWLReasoner reasoner;
+//		
+//		if(reasonerHermitInstance==null){
+//			Configuration conf=new Configuration();
+//			
+//			//questo server perché il datatype reversible non è supportato da OWL 2, per farlo funzionare ci vuole questa configurazione
+//			conf.ignoreUnsupportedDatatypes=true;
+//			conf.throwInconsistentOntologyException=false;
+//			
+//			reasoner=new Reasoner(conf, ontology);
+//			reasonerHermitInstance=reasoner;
+//			
+//		}
+//		
+//		return reasonerHermitInstance;
+//		
+//	}
 	
 	private OWLReasoner getReasonerPellet(OWLOntology ontology){
 		

@@ -6,47 +6,6 @@
 			<attribute name="maven.pomderived" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry excluding="lpad/DeAndrea.java|lpad/OWLReader.java|lpad/RiskFactorsData.java|lpad/RiskFactorsDataBuilder.java" kind="src" path="sr"/>
-	<classpathentry kind="lib" path="HermiT.jar">
-		<attributes>
-			<attribute name="javadoc_location" value="file:/c:/Users/Flavio/git/Prova OWL HERMIT/owlapi-osgidistribution-4.0.1-javadoc.jar"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="org.semanticweb.HermiT.jar">
-		<attributes>
-			<attribute name="javadoc_location" value="file:/c:/Users/Flavio/git/Prova%20OWL%20HERMIT/owlapi-osgidistribution-4.0.1-javadoc.jar"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="owlapi-osgidistribution-4.0.1 (1).jar">
-		<attributes>
-			<attribute name="javadoc_location" value="file:/C:/Users/Flavio/git/Prova%20OWL%20HERMIT/owlapi-osgidistribution-4.0.1-javadoc.jar"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="sparqldl-api-src.jar"/>
-	<classpathentry kind="lib" path="sparqldl-api.jar">
-		<attributes>
-			<attribute name="javadoc_location" value="jar:platform:/resource/Prova%20OWL%20HERMIT/sparqldl-api-javadoc.jar!/"/>
-		</attributes>
-	</classpathentry>
-	<classpathentry kind="lib" path="lib/jdom.jar"/>
-	<classpathentry kind="lib" path="lib/jpaul-2.5.1.jar"/>
-	<classpathentry kind="lib" path="lib/junit-4.8.2.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/aterm-java-1.6.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-cli.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-core.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-datatypes.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-dig.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-el.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-explanation.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-jena.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-modularity.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-owlapi.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-owlapiv3.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-pellint.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-query.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-rules.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/pellet-test.jar"/>
-	<classpathentry kind="lib" path="pellet-2.3.0/lib/servlet.jar"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/J2SE-1.5">
 		<attributes>
 			<attribute name="maven.pomderived" value="true"/>
