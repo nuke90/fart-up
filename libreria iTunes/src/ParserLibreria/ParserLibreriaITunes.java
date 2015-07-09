@@ -506,7 +506,9 @@ public List<String> getPlaylistNamesTrackNumberAndSize(){
 	for(String s : handler.getPlaylist().keySet()){
 		dimensione=0;
 		for(Integer indice : handler.getPlaylist().get(s)){
-			dimensione+=handler.getBrani().get(indice).size; //otteniamo la dimensione in bite, noi la esprimiamo in MB
+			if(handler.getBrani()!=null && handler.getBrani().containsKey(indice)){
+				dimensione+=handler.getBrani().get(indice).size; //otteniamo la dimensione in bite, noi la esprimiamo in MB
+			}
 		}
 		dimensione=dimensione/1048576;
 		ret.add(s+" (n:"+handler.getPlaylist().get(s).size()+" brani, "+dimensione+"MB)");
